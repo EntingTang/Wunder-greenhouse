@@ -219,23 +219,6 @@ def _date_controls(
                 args=(date_key, after_dates),
                 width="stretch",
             )
-    selection_columns = st.columns(2)
-    with selection_columns[0]:
-        st.button(
-            "Select all",
-            key=_state_key(prefix, "select_all_dates_button"),
-            on_click=_set_selected_dates,
-            args=(date_key, dates),
-            width="stretch",
-        )
-    with selection_columns[1]:
-        st.button(
-            "Select none",
-            key=_state_key(prefix, "select_no_dates_button"),
-            on_click=_set_selected_dates,
-            args=(date_key, []),
-            width="stretch",
-        )
     if any(pd.Timestamp(date) < REWATERING_DATE for date in selected):
         st.caption("Before rewatering, interpret the Water label RW as DT.")
     return [pd.Timestamp(value) for value in selected]

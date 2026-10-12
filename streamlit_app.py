@@ -14,8 +14,7 @@ DATA_FILES = {
 }
 READ_ONLY_STATE_SUFFIXES = (
     "__interactive_plot",
-    "__select_before_rewatering",
-    "__select_after_rewatering",
+    "_button",
     "_download",
 )
 

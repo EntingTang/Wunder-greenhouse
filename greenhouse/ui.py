@@ -131,22 +131,25 @@ def _multiple_choice(
     )
 
 
-def _set_all_dates(date_key: str, checkbox_key: str, options: list[pd.Timestamp]) -> None:
-    st.session_state[date_key] = list(options) if st.session_state[checkbox_key] else []
+def _sync_date_state(key: str, options: list[pd.Timestamp]) -> None:
+    previous_options_key = f"{key}__available"
+    previous_options = st.session_state.get(previous_options_key, [])
+    current = st.session_state.get(key)
+    if current is None:
+        selected = options[-1:]
+    elif not current:
+        selected = []
+    else:
+        was_all = bool(previous_options) and set(current) == set(previous_options)
+        selected = list(options) if was_all else [value for value in current if value in options]
+        if not selected:
+            selected = options[-1:]
+    st.session_state[key] = selected
+    st.session_state[previous_options_key] = list(options)
 
 
-def _sync_all_dates_checkbox(date_key: str, checkbox_key: str, options: list[pd.Timestamp]) -> None:
-    st.session_state[checkbox_key] = bool(options) and set(st.session_state[date_key]) == set(options)
-
-
-def _select_date_period(
-    date_key: str,
-    checkbox_key: str,
-    period_dates: list[pd.Timestamp],
-    all_dates: list[pd.Timestamp],
-) -> None:
-    st.session_state[date_key] = list(period_dates)
-    st.session_state[checkbox_key] = bool(all_dates) and set(period_dates) == set(all_dates)
+def _set_selected_dates(date_key: str, selected_dates: list[pd.Timestamp]) -> None:
+    st.session_state[date_key] = list(selected_dates)
 
 
 def _date_period_styles(dates: list[pd.Timestamp], crop_frame: pd.DataFrame) -> None:
@@ -180,38 +183,15 @@ def _date_controls(
     variable: str,
     crop_frame: pd.DataFrame,
     prefix: str,
-    *,
-    allow_multiple: bool = True,
-) -> tuple[list[pd.Timestamp], str]:
+) -> list[pd.Timestamp]:
     valid = frame.loc[valid_value_mask(frame, variable)]
     dates = sorted(pd.Timestamp(value).normalize() for value in valid["Date"].unique())
     if not dates:
-        return [], "Single date"
+        return []
 
     format_func = lambda value: format_date(pd.Timestamp(value), crop_frame)
-    date_mode = "Single date"
-    if allow_multiple:
-        date_mode = _single_choice(
-            "Date selection",
-            ["Single date", "Multiple dates"],
-            _state_key(prefix, "date_mode"),
-            default="Single date",
-            horizontal=True,
-        )
-
-    if date_mode == "Single date":
-        selected = _single_choice(
-            "Date",
-            dates,
-            _state_key(prefix, "single_date"),
-            default=dates[-1],
-            format_func=format_func,
-        )
-        return [pd.Timestamp(selected)], date_mode
-
-    date_key = _state_key(prefix, "multiple_dates")
-    checkbox_key = _state_key(prefix, "all_dates")
-    _sync_multiselect_state(date_key, dates, default_all=True)
+    date_key = _state_key(prefix, "dates")
+    _sync_date_state(date_key, dates)
     before_dates = [date for date in dates if date < REWATERING_DATE]
     after_dates = [date for date in dates if date >= REWATERING_DATE]
     if before_dates and after_dates:
@@ -227,38 +207,45 @@ def _date_controls(
         with period_columns[0]:
             st.button(
                 "Before rewatering",
-                key=_state_key(prefix, "select_before_rewatering"),
-                on_click=_select_date_period,
-                args=(date_key, checkbox_key, before_dates, dates),
+                key=_state_key(prefix, "before_rewatering_dates_button"),
+                on_click=_set_selected_dates,
+                args=(date_key, before_dates),
                 width="stretch",
             )
         with period_columns[1]:
             st.button(
                 "After rewatering",
-                key=_state_key(prefix, "select_after_rewatering"),
-                on_click=_select_date_period,
-                args=(date_key, checkbox_key, after_dates, dates),
+                key=_state_key(prefix, "after_rewatering_dates_button"),
+                on_click=_set_selected_dates,
+                args=(date_key, after_dates),
                 width="stretch",
             )
-    all_selected = bool(dates) and set(st.session_state[date_key]) == set(dates)
-    st.session_state[checkbox_key] = all_selected
-    st.checkbox(
-        "Select all available dates",
-        key=checkbox_key,
-        on_change=_set_all_dates,
-        args=(date_key, checkbox_key, dates),
-    )
     selected = st.multiselect(
         "Dates",
         dates,
         key=date_key,
         format_func=format_func,
-        on_change=_sync_all_dates_checkbox,
-        args=(date_key, checkbox_key, dates),
     )
+    selection_columns = st.columns(2)
+    with selection_columns[0]:
+        st.button(
+            "Select all",
+            key=_state_key(prefix, "select_all_dates_button"),
+            on_click=_set_selected_dates,
+            args=(date_key, dates),
+            width="stretch",
+        )
+    with selection_columns[1]:
+        st.button(
+            "Select none",
+            key=_state_key(prefix, "select_no_dates_button"),
+            on_click=_set_selected_dates,
+            args=(date_key, []),
+            width="stretch",
+        )
     if any(pd.Timestamp(date) < REWATERING_DATE for date in selected):
         st.caption("Before rewatering, interpret the Water label RW as DT.")
-    return [pd.Timestamp(value) for value in selected], date_mode
+    return [pd.Timestamp(value) for value in selected]
 
 
 def _date_facets(
@@ -659,13 +646,13 @@ def _render_single_plant(
         & frame["Label"].eq(label)
     ]
     with filter_columns[2]:
-        dates, date_mode = _date_controls(scoped, variable, frame, prefix)
+        dates = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
 
     presentation = "Single date"
-    if date_mode == "Multiple dates":
+    if len(dates) > 1:
         presentation = _single_choice(
             "Date display",
             ["Date facets", "Overlay dates"],
@@ -745,13 +732,13 @@ def _render_treatment_curve(
         nitrogen = _single_choice("Nitrogen", nitrogens, _state_key(prefix, "nitrogen"))
     scoped = frame.loc[frame["Water"].eq(water) & frame["Nitrogen"].eq(nitrogen)]
     with filter_columns[2]:
-        dates, date_mode = _date_controls(scoped, variable, frame, prefix)
+        dates = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
 
     presentation = "Single date"
-    if date_mode == "Multiple dates":
+    if len(dates) > 1:
         presentation = _single_choice(
             "Date display",
             ["Period summary", "Date facets", "Overlay dates"],
@@ -993,12 +980,12 @@ def _render_treatment_comparison(
         & frame[other_factor].isin(selected_other_levels)
     ]
     with filter_columns[2]:
-        dates, date_mode = _date_controls(scoped, variable, frame, prefix)
+        dates = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
     presentation = "Single date"
-    if date_mode == "Multiple dates":
+    if len(dates) > 1:
         presentation = _single_choice(
             "Date display",
             ["Period summary", "Date facets", "Overlay dates"],

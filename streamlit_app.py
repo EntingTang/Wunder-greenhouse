@@ -31,9 +31,15 @@ st.markdown(
         --surface: #f7faf7;
         --accent: #34735a;
       }
-      html, body, [class*="st-"] {
+      html, body, .stApp {
         font-family: "Geist", "Aptos", "Segoe UI", sans-serif;
         color: var(--ink);
+      }
+      .material-symbols-rounded,
+      [data-testid="stIconMaterial"] {
+        font-family: "Material Symbols Rounded" !important;
+        font-weight: normal !important;
+        font-style: normal !important;
       }
       .stApp { background: #fbfdfb; }
       .block-container {

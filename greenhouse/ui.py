@@ -590,7 +590,7 @@ def _render_single_plant(
 ) -> None:
     prefix = _state_key(crop, "explore", "single_plant", variable)
     valid = frame.loc[valid_value_mask(frame, variable)]
-    filter_columns = st.columns([1, 1, 1.35])
+    filter_columns = st.columns(3)
     water_options = ordered_values(valid["Water"], WATER_ORDER)
     with filter_columns[0]:
         water = _single_choice("Water", water_options, _state_key(prefix, "water"))
@@ -600,16 +600,16 @@ def _render_single_plant(
         nitrogen = _single_choice("Nitrogen", nitrogen_options, _state_key(prefix, "nitrogen"))
     valid = valid.loc[valid["Nitrogen"].eq(nitrogen)]
     unit_options = ordered_values(valid["PlantUnit"])
-    with filter_columns[0]:
+    with filter_columns[2]:
         unit = _single_choice(identity_column, unit_options, _state_key(prefix, "plant_unit"))
     valid = valid.loc[valid["PlantUnit"].eq(unit)]
     label_options = ordered_values(valid["Label"])
     if len(label_options) > 1:
-        with filter_columns[1]:
+        with filter_columns[2]:
             label = _single_choice("Label", label_options, _state_key(prefix, "label"))
     elif label_options:
         label = label_options[0]
-        with filter_columns[1]:
+        with filter_columns[2]:
             st.caption(f"Label: {label}")
     else:
         st.info("No plant matches the current treatment and block/replicate selection.")
@@ -621,7 +621,7 @@ def _render_single_plant(
         & frame["PlantUnit"].eq(unit)
         & frame["Label"].eq(label)
     ]
-    with filter_columns[2]:
+    with st.container():
         dates = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")
@@ -698,7 +698,7 @@ def _render_treatment_curve(
 ) -> None:
     prefix = _state_key(crop, "explore", "treatment_curve", variable)
     valid = frame.loc[valid_value_mask(frame, variable)]
-    filter_columns = st.columns([1, 1, 1.35])
+    filter_columns = st.columns(2)
     waters = ordered_values(valid["Water"], WATER_ORDER)
     with filter_columns[0]:
         water = _single_choice("Water", waters, _state_key(prefix, "water"))
@@ -707,7 +707,7 @@ def _render_treatment_curve(
     with filter_columns[1]:
         nitrogen = _single_choice("Nitrogen", nitrogens, _state_key(prefix, "nitrogen"))
     scoped = frame.loc[frame["Water"].eq(water) & frame["Nitrogen"].eq(nitrogen)]
-    with filter_columns[2]:
+    with st.container():
         dates = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")
@@ -910,7 +910,7 @@ def _render_treatment_comparison(
     other_factor = "Nitrogen" if comparison_factor == "Water" else "Water"
     prefix = _state_key(crop, "compare", comparison_factor, variable)
     valid = frame.loc[valid_value_mask(frame, variable)]
-    filter_columns = st.columns([1, 1, 1.35])
+    filter_columns = st.columns(2)
     factor_columns = {"Water": filter_columns[0], "Nitrogen": filter_columns[1]}
     preferred = WATER_ORDER if comparison_factor == "Water" else NITROGEN_ORDER
     levels = ordered_values(valid[comparison_factor], preferred)
@@ -955,7 +955,7 @@ def _render_treatment_comparison(
         frame[comparison_factor].isin(selected_levels)
         & frame[other_factor].isin(selected_other_levels)
     ]
-    with filter_columns[2]:
+    with st.container():
         dates = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")

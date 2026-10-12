@@ -146,6 +146,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
+    facet_title_space = 50 if any(columns) else 0
     subplot_titles = [column if row_index == 0 else "" for row_index, _ in enumerate(rows) for column in columns]
     figure = make_subplots(
         rows=len(rows),
@@ -246,8 +247,13 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             "font": {"size": 23},
         },
         template="plotly_white",
-        height=max(520, 360 * len(rows)),
-        margin={"l": 78, "r": 54 if any(rows) else 28, "t": 105, "b": 70},
+        height=max(520, 360 * len(rows)) + facet_title_space,
+        margin={
+            "l": 78,
+            "r": 54 if any(rows) else 28,
+            "t": 105 + facet_title_space,
+            "b": 70,
+        },
         hovermode="closest",
         legend={
             "orientation": "h",

@@ -12,6 +12,12 @@ DATA_FILES = {
     "Potato": APP_ROOT / "data" / "Potato_LC_data_for_ts_plots.xlsx",
     "Tomato": APP_ROOT / "data" / "Tomato_LC_data_for_ts_plots.xlsx",
 }
+READ_ONLY_STATE_SUFFIXES = (
+    "__interactive_plot",
+    "__select_before_rewatering",
+    "__select_after_rewatering",
+    "_download",
+)
 
 
 st.set_page_config(
@@ -23,7 +29,9 @@ st.set_page_config(
 
 # Keep crop-specific widget values when only the selected crop panel is rendered.
 for state_key in list(st.session_state):
-    if state_key.startswith("greenhouse__"):
+    is_crop_state = state_key.startswith("greenhouse__")
+    is_read_only = state_key.endswith(READ_ONLY_STATE_SUFFIXES)
+    if is_crop_state and not is_read_only:
         st.session_state[state_key] = st.session_state[state_key]
 
 st.markdown(

@@ -543,21 +543,27 @@ def _render_single_plant(
 ) -> None:
     prefix = _state_key(crop, "explore", "single_plant", variable)
     valid = frame.loc[valid_value_mask(frame, variable)]
+    filter_columns = st.columns([1, 1, 1.35])
     water_options = ordered_values(valid["Water"], WATER_ORDER)
-    water = _single_choice("Water", water_options, _state_key(prefix, "water"))
+    with filter_columns[0]:
+        water = _single_choice("Water", water_options, _state_key(prefix, "water"))
     valid = valid.loc[valid["Water"].eq(water)]
     nitrogen_options = ordered_values(valid["Nitrogen"], NITROGEN_ORDER)
-    nitrogen = _single_choice("Nitrogen", nitrogen_options, _state_key(prefix, "nitrogen"))
+    with filter_columns[1]:
+        nitrogen = _single_choice("Nitrogen", nitrogen_options, _state_key(prefix, "nitrogen"))
     valid = valid.loc[valid["Nitrogen"].eq(nitrogen)]
     unit_options = ordered_values(valid["PlantUnit"])
-    unit = _single_choice(identity_column, unit_options, _state_key(prefix, "plant_unit"))
+    with filter_columns[0]:
+        unit = _single_choice(identity_column, unit_options, _state_key(prefix, "plant_unit"))
     valid = valid.loc[valid["PlantUnit"].eq(unit)]
     label_options = ordered_values(valid["Label"])
     if len(label_options) > 1:
-        label = _single_choice("Label", label_options, _state_key(prefix, "label"))
+        with filter_columns[1]:
+            label = _single_choice("Label", label_options, _state_key(prefix, "label"))
     elif label_options:
         label = label_options[0]
-        st.caption(f"Label: {label}")
+        with filter_columns[1]:
+            st.caption(f"Label: {label}")
     else:
         st.info("No plant matches the current treatment and block/replicate selection.")
         return
@@ -568,7 +574,8 @@ def _render_single_plant(
         & frame["PlantUnit"].eq(unit)
         & frame["Label"].eq(label)
     ]
-    dates, date_mode = _date_controls(scoped, variable, frame, prefix)
+    with filter_columns[2]:
+        dates, date_mode = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
@@ -644,13 +651,17 @@ def _render_treatment_curve(
 ) -> None:
     prefix = _state_key(crop, "explore", "treatment_curve", variable)
     valid = frame.loc[valid_value_mask(frame, variable)]
+    filter_columns = st.columns([1, 1, 1.35])
     waters = ordered_values(valid["Water"], WATER_ORDER)
-    water = _single_choice("Water", waters, _state_key(prefix, "water"))
+    with filter_columns[0]:
+        water = _single_choice("Water", waters, _state_key(prefix, "water"))
     valid = valid.loc[valid["Water"].eq(water)]
     nitrogens = ordered_values(valid["Nitrogen"], NITROGEN_ORDER)
-    nitrogen = _single_choice("Nitrogen", nitrogens, _state_key(prefix, "nitrogen"))
+    with filter_columns[1]:
+        nitrogen = _single_choice("Nitrogen", nitrogens, _state_key(prefix, "nitrogen"))
     scoped = frame.loc[frame["Water"].eq(water) & frame["Nitrogen"].eq(nitrogen)]
-    dates, date_mode = _date_controls(scoped, variable, frame, prefix)
+    with filter_columns[2]:
+        dates, date_mode = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
@@ -726,26 +737,32 @@ def _render_individual_comparison(
 ) -> None:
     prefix = _state_key(crop, "compare", "individual_plants", variable)
     valid = frame.loc[valid_value_mask(frame, variable)]
-    dates = sorted(pd.Timestamp(value) for value in valid["Date"].unique())
-    if not dates:
-        st.info("No dates contain valid measurements for this variable.")
-        return
-    date = _single_choice(
-        "Date",
-        dates,
-        _state_key(prefix, "date"),
-        default=dates[-1],
-        format_func=lambda value: format_date(pd.Timestamp(value), frame),
-    )
-    valid = valid.loc[valid["Date"].eq(date)]
+    filter_columns = st.columns([1, 1, 1.35])
     waters = ordered_values(valid["Water"], WATER_ORDER)
-    selected_waters = _multiple_choice("Water", waters, _state_key(prefix, "waters"), default_all=True)
+    with filter_columns[0]:
+        selected_waters = _multiple_choice(
+            "Water", waters, _state_key(prefix, "waters"), default_all=True
+        )
     valid = valid.loc[valid["Water"].isin(selected_waters)]
     nitrogens = ordered_values(valid["Nitrogen"], NITROGEN_ORDER)
-    selected_nitrogens = _multiple_choice(
-        "Nitrogen", nitrogens, _state_key(prefix, "nitrogens"), default_all=True
-    )
+    with filter_columns[1]:
+        selected_nitrogens = _multiple_choice(
+            "Nitrogen", nitrogens, _state_key(prefix, "nitrogens"), default_all=True
+        )
     valid = valid.loc[valid["Nitrogen"].isin(selected_nitrogens)]
+    dates = sorted(pd.Timestamp(value) for value in valid["Date"].unique())
+    if not dates:
+        st.info("No dates contain valid measurements for these treatments.")
+        return
+    with filter_columns[2]:
+        date = _single_choice(
+            "Date",
+            dates,
+            _state_key(prefix, "date"),
+            default=dates[-1],
+            format_func=lambda value: format_date(pd.Timestamp(value), frame),
+        )
+    valid = valid.loc[valid["Date"].eq(date)]
     labels = ordered_values(valid["Label"])
     selected_labels = _multiple_choice(
         "Plants",
@@ -845,16 +862,19 @@ def _render_treatment_comparison(
     other_factor = "Nitrogen" if comparison_factor == "Water" else "Water"
     prefix = _state_key(crop, "compare", comparison_factor, variable)
     valid = frame.loc[valid_value_mask(frame, variable)]
+    filter_columns = st.columns([1, 1, 1.35])
+    factor_columns = {"Water": filter_columns[0], "Nitrogen": filter_columns[1]}
     preferred = WATER_ORDER if comparison_factor == "Water" else NITROGEN_ORDER
     levels = ordered_values(valid[comparison_factor], preferred)
-    selected_levels = _multiple_choice(
-        f"{comparison_factor} treatments",
-        levels,
-        _state_key(prefix, "levels"),
-        default_all=True,
-        maximum=3,
-        help_text="Choose any two or three available treatment levels.",
-    )
+    with factor_columns[comparison_factor]:
+        selected_levels = _multiple_choice(
+            f"{comparison_factor} treatments",
+            levels,
+            _state_key(prefix, "levels"),
+            default_all=True,
+            maximum=3,
+            help_text="Choose any two or three available treatment levels.",
+        )
     if len(selected_levels) < 2:
         st.info(f"Select at least two {comparison_factor.lower()} treatments to compare.")
         return
@@ -862,20 +882,22 @@ def _render_treatment_comparison(
     other_preferred = NITROGEN_ORDER if other_factor == "Nitrogen" else WATER_ORDER
     other_levels = ordered_values(valid[other_factor], other_preferred)
     display_options = [f"Fixed {other_factor}", f"Facet by {other_factor}"]
-    other_display = _single_choice(
-        f"{other_factor} display",
-        display_options,
-        _state_key(prefix, "other_display"),
-        default=display_options[0],
-        horizontal=True,
-    )
+    with factor_columns[other_factor]:
+        other_display = _single_choice(
+            f"{other_factor} display",
+            display_options,
+            _state_key(prefix, "other_display"),
+            default=display_options[0],
+            horizontal=True,
+        )
     facet_factor: str | None = None
     if other_display.startswith("Fixed"):
-        fixed_level = _single_choice(
-            other_factor,
-            other_levels,
-            _state_key(prefix, "fixed_other"),
-        )
+        with factor_columns[other_factor]:
+            fixed_level = _single_choice(
+                other_factor,
+                other_levels,
+                _state_key(prefix, "fixed_other"),
+            )
         selected_other_levels = [fixed_level]
     else:
         selected_other_levels = other_levels
@@ -885,7 +907,8 @@ def _render_treatment_comparison(
         frame[comparison_factor].isin(selected_levels)
         & frame[other_factor].isin(selected_other_levels)
     ]
-    dates, date_mode = _date_controls(scoped, variable, frame, prefix)
+    with filter_columns[2]:
+        dates, date_mode = _date_controls(scoped, variable, frame, prefix)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return

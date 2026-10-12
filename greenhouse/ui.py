@@ -196,13 +196,13 @@ def _date_controls(
     after_dates = [date for date in dates if date >= REWATERING_DATE]
     if before_dates and after_dates:
         _date_period_styles(dates, crop_frame)
-        st.markdown(
-            '<div class="date-period-key">'
-            '<span class="date-period-before">Before rewatering</span>'
-            '<span class="date-period-after">After rewatering</span>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
+    selected = st.multiselect(
+        "Dates",
+        dates,
+        key=date_key,
+        format_func=format_func,
+    )
+    if before_dates and after_dates:
         period_columns = st.columns(2)
         with period_columns[0]:
             st.button(
@@ -220,12 +220,6 @@ def _date_controls(
                 args=(date_key, after_dates),
                 width="stretch",
             )
-    selected = st.multiselect(
-        "Dates",
-        dates,
-        key=date_key,
-        format_func=format_func,
-    )
     selection_columns = st.columns(2)
     with selection_columns[0]:
         st.button(

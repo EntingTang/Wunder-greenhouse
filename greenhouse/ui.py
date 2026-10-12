@@ -474,7 +474,8 @@ def _render_result(
         "responsive": False,
     }
     if len(spec.facet_columns) > 3:
-        figure_width = max(1180, 410 * len(spec.facet_columns))
+        figure_width = max(1380, 460 * len(spec.facet_columns))
+        figure.update_layout(width=figure_width, autosize=False)
         with st.container(
             key=_state_key(key_prefix, "plot_scroller"),
             horizontal=True,

@@ -140,12 +140,25 @@ def _facet_values(frame: pd.DataFrame, column: str, configured: list[str]) -> li
     return values or [""]
 
 
+def _legend_duplicates_facet_titles(data: pd.DataFrame, columns: list[str]) -> bool:
+    """Return whether every legend label merely repeats its date facet title."""
+
+    if not any(columns) or not {"FacetColumn", "LegendLabel"}.issubset(data.columns):
+        return False
+    facets = data.loc[data["FacetColumn"].astype(str).ne("")]
+    return bool(
+        not facets.empty
+        and facets["LegendLabel"].astype(str).eq(facets["FacetColumn"].astype(str)).all()
+    )
+
+
 def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     """Render a Plotly figure with shared ranges and optional SD ribbons."""
 
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
+    show_legend = not _legend_duplicates_facet_titles(data, columns)
     facet_title_space = 50 if any(columns) else 0
     subplot_titles = [column if row_index == 0 else "" for row_index, _ in enumerate(rows) for column in columns]
     figure = make_subplots(
@@ -153,7 +166,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
         cols=len(columns),
         shared_xaxes=True,
         shared_yaxes=True,
-        horizontal_spacing=0.055,
+        horizontal_spacing=min(0.055, 0.18 / max(1, len(columns) - 1)),
         vertical_spacing=0.11,
         subplot_titles=subplot_titles,
     )
@@ -207,7 +220,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                         mode=spec.line_mode,
                         name=legend_label,
                         legendgroup=legend_label,
-                        showlegend=legend_label not in seen_legends,
+                        showlegend=show_legend and legend_label not in seen_legends,
                         line={"color": color, "width": 2.2, "dash": dash},
                         marker={
                             "color": color,
@@ -255,6 +268,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             "b": 70,
         },
         hovermode="closest",
+        showlegend=show_legend,
         legend={
             "orientation": "h",
             "yanchor": "bottom",
@@ -307,6 +321,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
+    show_legend = not _legend_duplicates_facet_titles(data, columns)
     figure, axes = plt.subplots(
         len(rows),
         len(columns),
@@ -398,7 +413,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
         fontsize=16,
         fontweight="bold",
     )
-    if legend_handles:
+    if legend_handles and show_legend:
         figure.legend(
             legend_handles.values(),
             legend_handles.keys(),

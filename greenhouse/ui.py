@@ -1066,7 +1066,7 @@ def _render_treatment_comparison(
     )
 
 
-def render_crop_panel(crop: str, path: Path) -> None:
+def render_crop_panel(crop: str, path: Path, function: str) -> None:
     """Render one isolated crop panel, including its own load errors and state."""
 
     st.markdown(f"### {crop} light-response curves")
@@ -1109,13 +1109,6 @@ def render_crop_panel(crop: str, path: Path) -> None:
     variable_label = VARIABLE_LABELS[variable]
     st.markdown('<div class="section-rule"></div>', unsafe_allow_html=True)
 
-    with st.sidebar:
-        function = _single_choice(
-            f"{crop} analysis",
-            ["Explore Data", "Compare Data"],
-            _state_key(crop, "function"),
-            default="Explore Data",
-        )
     color_map, symbol_order, dash_order = _style_maps(frame)
     identity_column = str(frame["PlantUnitColumn"].iloc[0])
 

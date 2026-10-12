@@ -116,7 +116,6 @@ st.title("Greenhouse curve explorer")
 
 with st.sidebar:
     st.header("View controls")
-    st.caption("Choose a crop first, then select an analysis mode.")
     selected_crop = st.radio(
         "Crop",
         list(DATA_FILES),

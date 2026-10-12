@@ -593,6 +593,7 @@ def _build_spec(
     symbol_order: list[str],
     dash_order: list[str],
     summary: bool,
+    show_ribbon: bool | None = None,
 ) -> PlotSpec:
     visible = plot_data
     if visible_dates is not None and "Date" in plot_data:
@@ -610,7 +611,7 @@ def _build_spec(
         dash_order=dash_order,
         facet_rows=facet_rows,
         facet_columns=facet_columns,
-        show_ribbon=summary,
+        show_ribbon=summary if show_ribbon is None else show_ribbon,
     )
 
 
@@ -796,6 +797,7 @@ def _render_treatment_curve(
         symbol_order=symbol_order,
         dash_order=dash_order,
         summary=True,
+        show_ribbon=presentation != "Overlay dates",
     )
     export = _export_table(plot_data, variable_label, identity_column)
     _render_result(
@@ -1051,6 +1053,7 @@ def _render_treatment_comparison(
         symbol_order=symbol_order,
         dash_order=dash_order,
         summary=True,
+        show_ribbon=presentation != "Overlay dates",
     )
     export = _export_table(plot_data, variable_label, identity_column)
     _render_result(

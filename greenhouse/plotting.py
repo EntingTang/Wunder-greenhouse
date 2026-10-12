@@ -377,7 +377,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
             if column_index == 0:
                 axis.set_ylabel(spec.y_label, fontsize=12.5)
             if column_value:
-                axis.set_title(column_value, fontsize=13, fontweight="semibold")
+                axis.set_title(column_value, fontsize=13, fontweight="bold")
             if row_value and column_index == len(columns) - 1:
                 axis.text(
                     1.03,
@@ -396,7 +396,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
         x=0.01,
         ha="left",
         fontsize=16,
-        fontweight="semibold",
+        fontweight="bold",
     )
     if legend_handles:
         figure.legend(

@@ -21,6 +21,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Keep crop-specific widget values when only the selected crop panel is rendered.
+for state_key in list(st.session_state):
+    if state_key.startswith("greenhouse__"):
+        st.session_state[state_key] = st.session_state[state_key]
+
 st.markdown(
     """
     <style>
@@ -51,17 +56,6 @@ st.markdown(
       h1 { font-size: clamp(2.1rem, 4vw, 3.65rem) !important; line-height: 1 !important; }
       h3 { margin-top: 0.2rem !important; }
       [data-testid="stCaptionContainer"] { color: var(--muted); }
-      [data-baseweb="tab-list"] {
-        gap: 0.25rem;
-        border-bottom: 1px solid var(--line);
-      }
-      [data-baseweb="tab"] {
-        min-width: 9rem;
-        height: 3.3rem;
-        padding: 0 1.4rem;
-        font-weight: 650;
-      }
-      [aria-selected="true"][data-baseweb="tab"] { color: var(--accent); }
       div[role="radiogroup"] {
         flex-wrap: nowrap;
         overflow-x: auto;
@@ -105,7 +99,6 @@ st.markdown(
       .date-period-after { background: #f6e4c9; color: #704515; }
       @media (max-width: 768px) {
         .block-container { padding: 1.2rem 1rem 3rem; }
-        [data-baseweb="tab"] { min-width: 7rem; padding: 0 0.8rem; }
       }
     </style>
     """,
@@ -123,11 +116,17 @@ with header_right:
 
 with st.sidebar:
     st.header("View controls")
-    st.caption("Choose Explore Data or Compare Data independently for each crop.")
+    st.caption("Choose a crop first, then select an analysis mode.")
+    selected_crop = st.radio(
+        "Crop",
+        list(DATA_FILES),
+        key="greenhouse__crop",
+    )
+    selected_analysis = st.radio(
+        "Analysis",
+        ["Explore Data", "Compare Data"],
+        key=f"greenhouse__{selected_crop.lower()}__function",
+    )
 
-potato_tab, tomato_tab = st.tabs(["Potato", "Tomato"])
-with potato_tab:
-    render_crop_panel("Potato", DATA_FILES["Potato"])
-with tomato_tab:
-    render_crop_panel("Tomato", DATA_FILES["Tomato"])
+render_crop_panel(selected_crop, DATA_FILES[selected_crop], selected_analysis)
 

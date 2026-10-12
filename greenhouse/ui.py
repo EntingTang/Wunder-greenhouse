@@ -551,7 +551,7 @@ def _render_result(
         csv_column, png_column, pdf_column = st.columns(3)
         with csv_column:
             st.download_button(
-                "Download plotting data (CSV)",
+                "Download CSV",
                 data=csv_data,
                 file_name=f"{filename_stem}.csv",
                 mime="text/csv",
@@ -561,7 +561,7 @@ def _render_result(
         with png_column:
             if png_data is not None:
                 st.download_button(
-                    "Download visible figure (PNG)",
+                    "Download PNG",
                     data=png_data,
                     file_name=f"{filename_stem}.png",
                     mime="image/png",
@@ -571,7 +571,7 @@ def _render_result(
         with pdf_column:
             if pdf_data is not None:
                 st.download_button(
-                    "Download visible figure (PDF)",
+                    "Download PDF",
                     data=pdf_data,
                     file_name=f"{filename_stem}.pdf",
                     mime="application/pdf",

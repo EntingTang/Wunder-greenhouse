@@ -1011,13 +1011,13 @@ def render_crop_panel(crop: str, path: Path) -> None:
     identity_column = str(frame["PlantUnitColumn"].iloc[0])
 
     if function == "Explore Data":
-        plot_kind = _single_choice(
-            "Explore view",
-            ["Single plant", "Treatment curve"],
-            _state_key(crop, "explore_kind"),
-            default="Single plant",
-            horizontal=True,
-        )
+        with st.sidebar:
+            plot_kind = _single_choice(
+                f"{crop} explore view",
+                ["Single plant", "Treatment curve"],
+                _state_key(crop, "explore_kind"),
+                default="Single plant",
+            )
         st.markdown("#### Filters")
         if plot_kind == "Single plant":
             _render_single_plant(

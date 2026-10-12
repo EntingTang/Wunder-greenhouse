@@ -235,11 +235,16 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                 y=1 - ((row_index - 0.5) / len(rows)),
                 textangle=90,
                 showarrow=False,
-                font={"size": 12, "color": "#475569"},
+                font={"size": 16, "color": "#475569"},
             )
 
     figure.update_layout(
-        title={"text": spec.title, "x": 0.015, "xanchor": "left"},
+        title={
+            "text": spec.title,
+            "x": 0.015,
+            "xanchor": "left",
+            "font": {"size": 23},
+        },
         template="plotly_white",
         height=max(520, 360 * len(rows)),
         margin={"l": 78, "r": 54 if any(rows) else 28, "t": 105, "b": 70},
@@ -251,8 +256,14 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             "xanchor": "right",
             "x": 1,
             "title": None,
+            "font": {"size": 15},
         },
-        font={"family": "Geist, Segoe UI, sans-serif", "color": "#1F2937"},
+        font={"family": "Geist, Segoe UI, sans-serif", "size": 16, "color": "#1F2937"},
+        hoverlabel={
+            "font": {"family": "Geist, Segoe UI, sans-serif", "size": 16},
+            "bgcolor": "#FFFFFF",
+            "bordercolor": "#CBD5E1",
+        },
         plot_bgcolor="#FFFFFF",
         paper_bgcolor="#FFFFFF",
     )
@@ -261,13 +272,18 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
         showgrid=True,
         gridcolor="#E8ECE8",
         zeroline=False,
+        tickfont={"size": 15},
+        title_font={"size": 17},
     )
     figure.update_yaxes(
         title_text=spec.y_label,
         showgrid=True,
         gridcolor="#E8ECE8",
         zeroline=False,
+        tickfont={"size": 15},
+        title_font={"size": 17},
     )
+    figure.update_annotations(font={"size": 16, "color": "#334155"})
     return figure
 
 
@@ -349,12 +365,13 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
             axis.set_ylim(y_range)
             axis.grid(True, color="#E8ECE8", linewidth=0.8)
             axis.spines[["top", "right"]].set_visible(False)
+            axis.tick_params(axis="both", labelsize=11)
             if row_index == len(rows) - 1:
-                axis.set_xlabel("PAR (µmol m⁻² s⁻¹)")
+                axis.set_xlabel("PAR (µmol m⁻² s⁻¹)", fontsize=12.5)
             if column_index == 0:
-                axis.set_ylabel(spec.y_label)
+                axis.set_ylabel(spec.y_label, fontsize=12.5)
             if column_value:
-                axis.set_title(column_value, fontsize=10.5, fontweight="semibold")
+                axis.set_title(column_value, fontsize=13, fontweight="semibold")
             if row_value and column_index == len(columns) - 1:
                 axis.text(
                     1.03,
@@ -364,11 +381,17 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                     rotation=-90,
                     va="center",
                     ha="left",
-                    fontsize=9.5,
+                    fontsize=11.5,
                     color="#475569",
                 )
 
-    figure.suptitle(spec.title.replace("<br>", "\n"), x=0.01, ha="left", fontsize=13, fontweight="semibold")
+    figure.suptitle(
+        spec.title.replace("<br>", "\n"),
+        x=0.01,
+        ha="left",
+        fontsize=16,
+        fontweight="semibold",
+    )
     if legend_handles:
         figure.legend(
             legend_handles.values(),
@@ -376,7 +399,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
             loc="outside upper right",
             ncols=min(4, len(legend_handles)),
             frameon=False,
-            fontsize=8.5,
+            fontsize=10.5,
         )
     output = BytesIO()
     figure.savefig(output, format=file_format, dpi=300, bbox_inches="tight", facecolor="white")

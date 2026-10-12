@@ -113,14 +113,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-header_left, header_right = st.columns([1.5, 1], vertical_alignment="bottom")
-with header_left:
-    st.title("Greenhouse curve explorer")
-with header_right:
-    st.markdown(
-        "Explore plant-level light-response curves or compare treatment means with "
-        "sample-SD uncertainty. Filters and selections stay independent for each crop."
-    )
+st.title("Greenhouse curve explorer")
 
 with st.sidebar:
     st.header("View controls")

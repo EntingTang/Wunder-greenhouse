@@ -172,5 +172,5 @@ def format_date(date: pd.Timestamp, frame: pd.DataFrame) -> str:
         return label
     dad = float(dads[0])
     dad_text = str(int(dad)) if dad.is_integer() else f"{dad:g}"
-    return f"{label} · DAD {dad_text}"
+    return f"{label} (DAD {dad_text})"
 

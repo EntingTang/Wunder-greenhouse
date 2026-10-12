@@ -1,4 +1,4 @@
-"""Greenhouse light-response curve dashboard entry point."""
+"""Streamlit entry point for the greenhouse light-response curve dashboard."""
 
 from pathlib import Path
 

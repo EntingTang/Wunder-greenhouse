@@ -39,21 +39,21 @@ Python 3.11 or newer is recommended.
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-streamlit run app.py
+streamlit run streamlit_app.py
 ```
 
 The command prints a local URL, normally `http://localhost:8501`.
 
 ## Deploy
 
-For Streamlit Community Cloud, connect this repository and set `app.py` as the
-entry point. Keep both Excel files committed under `data/`; dependencies are
-installed from `requirements.txt` automatically.
+For Streamlit Community Cloud, connect this repository and use the default
+`streamlit_app.py` entry point. Keep both Excel files committed under `data/`;
+dependencies are installed from `requirements.txt` automatically.
 
 For another Python host, install the requirements and start:
 
 ```text
-streamlit run app.py --server.address 0.0.0.0 --server.port $PORT
+streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port $PORT
 ```
 
 No secrets or external services are required. Replacing either workbook changes

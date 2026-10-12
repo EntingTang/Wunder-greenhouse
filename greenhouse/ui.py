@@ -38,6 +38,9 @@ from greenhouse.statistics import (
 
 WATER_ORDER = ("WW", "DT", "RW")
 NITROGEN_ORDER = ("N0", "N1", "N2")
+REWATERING_DATE = pd.Timestamp("2024-12-06")
+BEFORE_REWATERING_COLORS = ("#2F6F8F", "#4387A8", "#62A0BC", "#86B8CD", "#A8CCDA")
+AFTER_REWATERING_COLORS = ("#B7632B", "#CA7A3D", "#D99354", "#E3AD72", "#EBC894", "#F1DDB8")
 LINE_MODE_LABELS = {
     "Points + lines": "lines+markers",
     "Points": "markers",
@@ -135,6 +138,42 @@ def _sync_all_dates_checkbox(date_key: str, checkbox_key: str, options: list[pd.
     st.session_state[checkbox_key] = bool(options) and set(st.session_state[date_key]) == set(options)
 
 
+def _select_date_period(
+    date_key: str,
+    checkbox_key: str,
+    period_dates: list[pd.Timestamp],
+    all_dates: list[pd.Timestamp],
+) -> None:
+    st.session_state[date_key] = list(period_dates)
+    st.session_state[checkbox_key] = bool(all_dates) and set(period_dates) == set(all_dates)
+
+
+def _date_period_styles(dates: list[pd.Timestamp], crop_frame: pd.DataFrame) -> None:
+    before_labels = [format_date(date, crop_frame) for date in dates if date < REWATERING_DATE]
+    after_labels = [format_date(date, crop_frame) for date in dates if date >= REWATERING_DATE]
+
+    def selectors(labels: list[str]) -> str:
+        return ",".join(
+            f'[data-baseweb="tag"]:has(span[title="{label}"])' for label in labels
+        )
+
+    before_selectors = selectors(before_labels)
+    after_selectors = selectors(after_labels)
+    rules: list[str] = []
+    if before_selectors:
+        rules.append(
+            f"{before_selectors} {{ background-color: #D9EAF4 !important; color: #214C68 !important; }}"
+        )
+        rules.append(f"{before_selectors} span {{ color: #214C68 !important; }}")
+    if after_selectors:
+        rules.append(
+            f"{after_selectors} {{ background-color: #F6E4C9 !important; color: #704515 !important; }}"
+        )
+        rules.append(f"{after_selectors} span {{ color: #704515 !important; }}")
+    if rules:
+        st.markdown(f"<style>{''.join(rules)}</style>", unsafe_allow_html=True)
+
+
 def _date_controls(
     frame: pd.DataFrame,
     variable: str,
@@ -172,6 +211,34 @@ def _date_controls(
     date_key = _state_key(prefix, "multiple_dates")
     checkbox_key = _state_key(prefix, "all_dates")
     _sync_multiselect_state(date_key, dates, default_all=True)
+    before_dates = [date for date in dates if date < REWATERING_DATE]
+    after_dates = [date for date in dates if date >= REWATERING_DATE]
+    if before_dates and after_dates:
+        _date_period_styles(dates, crop_frame)
+        st.markdown(
+            '<div class="date-period-key">'
+            '<span class="date-period-before">Before rewatering</span>'
+            '<span class="date-period-after">After rewatering</span>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        period_columns = st.columns(2)
+        with period_columns[0]:
+            st.button(
+                "Before rewatering",
+                key=_state_key(prefix, "select_before_rewatering"),
+                on_click=_select_date_period,
+                args=(date_key, checkbox_key, before_dates, dates),
+                width="stretch",
+            )
+        with period_columns[1]:
+            st.button(
+                "After rewatering",
+                key=_state_key(prefix, "select_after_rewatering"),
+                on_click=_select_date_period,
+                args=(date_key, checkbox_key, after_dates, dates),
+                width="stretch",
+            )
     all_selected = bool(dates) and set(st.session_state[date_key]) == set(dates)
     st.session_state[checkbox_key] = all_selected
     st.checkbox(
@@ -188,6 +255,8 @@ def _date_controls(
         on_change=_sync_all_dates_checkbox,
         args=(date_key, checkbox_key, dates),
     )
+    if any(pd.Timestamp(date) < REWATERING_DATE for date in selected):
+        st.caption("Before rewatering, interpret the Water label RW as DT.")
     return [pd.Timestamp(value) for value in selected], date_mode
 
 
@@ -372,12 +441,26 @@ def _prepare_summary_plot(
 
 def _style_maps(frame: pd.DataFrame) -> tuple[dict[str, str], list[str], list[str]]:
     labels = ordered_values(frame["Label"])
-    dates = [pd.Timestamp(value).strftime("%Y-%m-%d") for value in sorted(frame["Date"].unique())]
+    ordered_dates = [pd.Timestamp(value) for value in sorted(frame["Date"].unique())]
+    dates = [value.strftime("%Y-%m-%d") for value in ordered_dates]
     waters = ordered_values(frame["Water"], WATER_ORDER)
     nitrogens = ordered_values(frame["Nitrogen"], NITROGEN_ORDER)
     colors = stable_color_map(waters, WATER_COLORS)
     colors.update(stable_color_map(nitrogens, NITROGEN_COLORS))
-    colors.update(stable_color_map(dates))
+    before_dates = [value for value in ordered_dates if value < REWATERING_DATE]
+    after_dates = [value for value in ordered_dates if value >= REWATERING_DATE]
+    colors.update(
+        {
+            value.strftime("%Y-%m-%d"): BEFORE_REWATERING_COLORS[index % len(BEFORE_REWATERING_COLORS)]
+            for index, value in enumerate(before_dates)
+        }
+    )
+    colors.update(
+        {
+            value.strftime("%Y-%m-%d"): AFTER_REWATERING_COLORS[index % len(AFTER_REWATERING_COLORS)]
+            for index, value in enumerate(after_dates)
+        }
+    )
     colors.update(stable_color_map(labels))
     identity = ordered_values(frame["PlantUnit"])
     symbols = identity + waters + nitrogens + [""]

@@ -9,7 +9,6 @@ import re
 import numpy as np
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 from greenhouse.data import (
     DataValidationError,
@@ -499,13 +498,14 @@ def _render_result(
             include_plotlyjs=True,
             config=plot_config,
         )
-        components.html(
+        st.iframe(
             (
                 "<style>html,body{margin:0;background:#fff;overflow-x:auto;}"
                 f"body{{min-width:{figure_width}px;}}</style>{plot_html}"
             ),
+            width="stretch",
             height=int(figure.layout.height or 520) + 36,
-            scrolling=True,
+            alt="Interactive light-response curves by selected date",
         )
     else:
         st.plotly_chart(

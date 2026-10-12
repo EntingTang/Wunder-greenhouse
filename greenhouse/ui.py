@@ -9,6 +9,7 @@ import re
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from greenhouse.data import (
     DataValidationError,
@@ -260,33 +261,12 @@ def _date_controls(
     return [pd.Timestamp(value) for value in selected], date_mode
 
 
-def _date_page(
+def _date_facets(
     selected_dates: list[pd.Timestamp],
     crop_frame: pd.DataFrame,
-    prefix: str,
 ) -> tuple[list[pd.Timestamp], list[str]]:
     ordered_dates = sorted(selected_dates)
-    pages = [ordered_dates[index : index + 3] for index in range(0, len(ordered_dates), 3)]
-    if not pages:
-        return [], []
-    page_index = 0
-    if len(pages) > 1:
-        options = list(range(len(pages)))
-
-        def page_label(index: int) -> str:
-            first = pages[index][0].strftime("%Y-%m-%d")
-            last = pages[index][-1].strftime("%Y-%m-%d")
-            return f"Page {index + 1}: {first} to {last}"
-
-        page_index = _single_choice(
-            "Date page",
-            options,
-            _state_key(prefix, "date_page"),
-            default=0,
-            format_func=page_label,
-        )
-    visible_dates = pages[page_index]
-    return visible_dates, [format_date(date, crop_frame) for date in visible_dates]
+    return ordered_dates, [format_date(date, crop_frame) for date in ordered_dates]
 
 
 def _date_summary(dates: list[pd.Timestamp], crop_frame: pd.DataFrame) -> str:
@@ -524,16 +504,36 @@ def _render_result(
             )
 
     figure = create_plotly_figure(spec)
-    st.plotly_chart(
-        figure,
-        width="stretch",
-        key=_state_key(key_prefix, "interactive_plot"),
-        config={
-            "displaylogo": False,
-            "scrollZoom": True,
-            "modeBarButtonsToRemove": ["lasso2d", "select2d"],
-        },
-    )
+    plot_config = {
+        "displaylogo": False,
+        "scrollZoom": True,
+        "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+        "responsive": False,
+    }
+    if len(spec.facet_columns) > 3:
+        figure_width = max(1180, 410 * len(spec.facet_columns))
+        figure.update_layout(width=figure_width)
+        st.caption("Scroll horizontally to inspect every selected date facet.")
+        plot_html = figure.to_html(
+            full_html=False,
+            include_plotlyjs=True,
+            config=plot_config,
+        )
+        components.html(
+            (
+                "<style>html,body{margin:0;background:#fff;overflow-x:auto;}"
+                f"body{{min-width:{figure_width}px;}}</style>{plot_html}"
+            ),
+            height=int(figure.layout.height or 520) + 36,
+            scrolling=True,
+        )
+    else:
+        st.plotly_chart(
+            figure,
+            width="stretch",
+            key=_state_key(key_prefix, "interactive_plot"),
+            config=plot_config,
+        )
 
     with st.expander("Plot data and downloads", expanded=False):
         st.caption(
@@ -692,7 +692,7 @@ def _render_single_plant(
     visible_dates: list[pd.Timestamp] | None = None
     facet_columns: list[str] = []
     if date_facets:
-        visible_dates, facet_columns = _date_page(dates, frame, prefix)
+        visible_dates, facet_columns = _date_facets(dates, frame)
     mode_text = "Plant means after duplicate LC records are merged"
     title = (
         f"{crop} · {variable_label}<br>"
@@ -778,7 +778,7 @@ def _render_treatment_curve(
     visible_dates: list[pd.Timestamp] | None = None
     facet_columns: list[str] = []
     if presentation == "Date facets":
-        visible_dates, facet_columns = _date_page(dates, frame, prefix)
+        visible_dates, facet_columns = _date_facets(dates, frame)
     title = (
         f"{crop} · {variable_label}<br>"
         f"{water} × {nitrogen} · {_date_summary(dates, frame)} · "
@@ -1025,7 +1025,7 @@ def _render_treatment_comparison(
     visible_dates: list[pd.Timestamp] | None = None
     facet_columns: list[str] = []
     if presentation == "Date facets":
-        visible_dates, facet_columns = _date_page(dates, frame, prefix)
+        visible_dates, facet_columns = _date_facets(dates, frame)
     facet_rows = (
         [f"{facet_factor}: {value}" for value in selected_other_levels] if facet_factor else []
     )

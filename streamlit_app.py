@@ -90,20 +90,6 @@ st.markdown(
         color: #20352b !important;
       }
       [data-baseweb="tag"] span { color: #20352b !important; }
-      .date-period-key {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.45rem;
-        margin: 0.2rem 0 0.55rem;
-      }
-      .date-period-key span {
-        border-radius: 999px;
-        font-size: 0.78rem;
-        font-weight: 650;
-        padding: 0.26rem 0.62rem;
-      }
-      .date-period-before { background: #d9eaf4; color: #214c68; }
-      .date-period-after { background: #f6e4c9; color: #704515; }
       @media (max-width: 768px) {
         .block-container { padding: 1.2rem 1rem 3rem; }
       }

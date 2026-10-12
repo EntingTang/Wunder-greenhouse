@@ -123,7 +123,7 @@ with header_right:
 
 with st.sidebar:
     st.header("View controls")
-    st.caption("Choose an explore view independently for each crop.")
+    st.caption("Choose Explore Data or Compare Data independently for each crop.")
 
 potato_tab, tomato_tab = st.tabs(["Potato", "Tomato"])
 with potato_tab:

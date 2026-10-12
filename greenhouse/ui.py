@@ -494,7 +494,6 @@ def _render_result(
     if len(spec.facet_columns) > 3:
         figure_width = max(1180, 410 * len(spec.facet_columns))
         figure.update_layout(width=figure_width)
-        st.caption("Scroll horizontally to inspect every selected date facet.")
         plot_html = figure.to_html(
             full_html=False,
             include_plotlyjs=True,

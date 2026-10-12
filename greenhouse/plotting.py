@@ -160,6 +160,10 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
     show_legend = not _legend_duplicates_facet_titles(data, columns)
     facet_title_space = 50 if any(columns) else 0
+    legend_space = 50 if show_legend else 0
+    base_height = max(520, 360 * len(rows))
+    plot_height = max(1, base_height - 175)
+    legend_y = 1.02 + (facet_title_space / plot_height)
     subplot_titles = [column if row_index == 0 else "" for row_index, _ in enumerate(rows) for column in columns]
     figure = make_subplots(
         rows=len(rows),
@@ -260,11 +264,11 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             "font": {"size": 23},
         },
         template="plotly_white",
-        height=max(520, 360 * len(rows)) + facet_title_space,
+        height=base_height + facet_title_space + legend_space,
         margin={
             "l": 78,
             "r": 54 if any(rows) else 28,
-            "t": 105 + facet_title_space,
+            "t": 105 + facet_title_space + legend_space,
             "b": 70,
         },
         hovermode="closest",
@@ -272,7 +276,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
         legend={
             "orientation": "h",
             "yanchor": "bottom",
-            "y": 1.02,
+            "y": legend_y,
             "xanchor": "right",
             "x": 1,
             "title": None,

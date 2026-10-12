@@ -475,21 +475,18 @@ def _render_result(
     }
     if len(spec.facet_columns) > 3:
         figure_width = max(1180, 410 * len(spec.facet_columns))
-        figure.update_layout(width=figure_width)
-        plot_html = figure.to_html(
-            full_html=False,
-            include_plotlyjs=True,
-            config=plot_config,
-        )
-        st.iframe(
-            (
-                "<style>html,body{margin:0;background:#fff;overflow-x:auto;}"
-                f"body{{min-width:{figure_width}px;}}</style>{plot_html}"
-            ),
-            width="stretch",
-            height=int(figure.layout.height or 520) + 36,
-            alt="Interactive light-response curves by selected date",
-        )
+        with st.container(
+            key=_state_key(key_prefix, "plot_scroller"),
+            horizontal=True,
+            wrap=False,
+            gap=None,
+        ):
+            st.plotly_chart(
+                figure,
+                width=figure_width,
+                key=_state_key(key_prefix, "interactive_plot"),
+                config=plot_config,
+            )
     else:
         st.plotly_chart(
             figure,

@@ -158,8 +158,9 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
+    has_column_facets = any(columns)
     show_legend = not _legend_duplicates_facet_titles(data, columns)
-    facet_title_space = 50 if any(columns) else 0
+    facet_title_space = 50 if has_column_facets else 0
     legend_space = 50 if show_legend else 0
     base_height = max(520, 360 * len(rows))
     plot_height = max(1, base_height - 175)
@@ -292,7 +293,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
         paper_bgcolor="#FFFFFF",
     )
     figure.update_xaxes(
-        title_text="PAR (µmol m⁻² s⁻¹)",
+        title_text=None if has_column_facets else "PAR (µmol m⁻² s⁻¹)",
         showgrid=True,
         gridcolor="#E8ECE8",
         zeroline=False,
@@ -300,7 +301,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
         title_font={"size": 17},
     )
     figure.update_yaxes(
-        title_text=spec.y_label,
+        title_text=None if has_column_facets else spec.y_label,
         showgrid=True,
         gridcolor="#E8ECE8",
         zeroline=False,
@@ -308,6 +309,28 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
         title_font={"size": 17},
     )
     figure.update_annotations(font={"size": 16, "color": "#334155"})
+    if has_column_facets:
+        figure.add_annotation(
+            text="PAR (µmol m⁻² s⁻¹)",
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0,
+            yshift=-52,
+            showarrow=False,
+            font={"size": 17, "color": "#334155"},
+        )
+        figure.add_annotation(
+            text=spec.y_label,
+            xref="paper",
+            yref="paper",
+            x=0,
+            xshift=-56,
+            y=0.5,
+            textangle=-90,
+            showarrow=False,
+            font={"size": 17, "color": "#334155"},
+        )
     return figure
 
 
@@ -325,6 +348,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
+    has_column_facets = any(columns)
     show_legend = not _legend_duplicates_facet_titles(data, columns)
     figure, axes = plt.subplots(
         len(rows),
@@ -391,9 +415,9 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
             axis.grid(True, color="#E8ECE8", linewidth=0.8)
             axis.spines[["top", "right"]].set_visible(False)
             axis.tick_params(axis="both", labelsize=11)
-            if row_index == len(rows) - 1:
+            if row_index == len(rows) - 1 and not has_column_facets:
                 axis.set_xlabel("PAR (µmol m⁻² s⁻¹)", fontsize=12.5)
-            if column_index == 0:
+            if column_index == 0 and not has_column_facets:
                 axis.set_ylabel(spec.y_label, fontsize=12.5)
             if column_value:
                 axis.set_title(column_value, fontsize=13, fontweight="bold")
@@ -417,6 +441,9 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
         fontsize=16,
         fontweight="bold",
     )
+    if has_column_facets:
+        figure.supxlabel("PAR (µmol m⁻² s⁻¹)", fontsize=12.5)
+        figure.supylabel(spec.y_label, fontsize=12.5)
     if legend_handles and show_legend:
         figure.legend(
             legend_handles.values(),

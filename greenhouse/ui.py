@@ -1109,24 +1109,24 @@ def render_crop_panel(crop: str, path: Path) -> None:
     variable_label = VARIABLE_LABELS[variable]
     st.markdown('<div class="section-rule"></div>', unsafe_allow_html=True)
 
-    function = _single_choice(
-        "Analysis",
-        ["Explore Data", "Compare Data"],
-        _state_key(crop, "function"),
-        default="Explore Data",
-        horizontal=True,
-    )
+    with st.sidebar:
+        function = _single_choice(
+            f"{crop} analysis",
+            ["Explore Data", "Compare Data"],
+            _state_key(crop, "function"),
+            default="Explore Data",
+        )
     color_map, symbol_order, dash_order = _style_maps(frame)
     identity_column = str(frame["PlantUnitColumn"].iloc[0])
 
     if function == "Explore Data":
-        with st.sidebar:
-            plot_kind = _single_choice(
-                f"{crop} explore view",
-                ["Single plant", "Treatment curve"],
-                _state_key(crop, "explore_kind"),
-                default="Single plant",
-            )
+        plot_kind = _single_choice(
+            "Explore view",
+            ["Single plant", "Treatment curve"],
+            _state_key(crop, "explore_kind"),
+            default="Single plant",
+            horizontal=True,
+        )
         st.markdown("#### Filters")
         if plot_kind == "Single plant":
             _render_single_plant(

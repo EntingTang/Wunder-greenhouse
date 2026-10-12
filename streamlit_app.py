@@ -18,7 +18,7 @@ st.set_page_config(
     page_title="Greenhouse curve explorer",
     page_icon=None,
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 st.markdown(
@@ -95,6 +95,10 @@ with header_right:
         "Explore plant-level light-response curves or compare treatment means with "
         "sample-SD uncertainty. Filters and selections stay independent for each crop."
     )
+
+with st.sidebar:
+    st.header("View controls")
+    st.caption("Choose an explore view independently for each crop.")
 
 potato_tab, tomato_tab = st.tabs(["Potato", "Tomato"])
 with potato_tab:

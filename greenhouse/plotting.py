@@ -162,6 +162,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     show_legend = not _legend_duplicates_facet_titles(data, columns)
     facet_title_space = 50 if has_column_facets else 0
     legend_space = 50 if show_legend else 0
+    shared_axis_label_space = 12 if has_column_facets else 0
     base_height = max(520, 360 * len(rows))
     plot_height = max(1, base_height - 175)
     legend_y = 1.02 + (facet_title_space / plot_height)
@@ -265,12 +266,12 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             "font": {"size": 23},
         },
         template="plotly_white",
-        height=base_height + facet_title_space + legend_space,
+        height=base_height + facet_title_space + legend_space + shared_axis_label_space,
         margin={
             "l": 78,
             "r": 54 if any(rows) else 28,
             "t": 105 + facet_title_space + legend_space,
-            "b": 70,
+            "b": 70 + shared_axis_label_space,
         },
         hovermode="closest",
         showlegend=show_legend,
@@ -316,7 +317,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             yref="paper",
             x=0.5,
             y=0,
-            yshift=-52,
+            yshift=-64,
             showarrow=False,
             font={"size": 17, "color": "#334155"},
         )

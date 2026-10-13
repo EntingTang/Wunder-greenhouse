@@ -326,7 +326,7 @@ def _prepare_individual_plot(
                 f"Date: {escape(str(row.DateDisplay))}",
                 f"Treatment: {escape(str(row.Treatment))}",
                 f"PAR: {_number(row.PAR)}",
-                f"Value: {_number(row.Value)}",
+                f"Value: {_number(row.Value, decimal_places=3)}",
                 f"Merged records: {int(row.RawRecords):,}",
             ]
         )

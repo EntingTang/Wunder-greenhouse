@@ -100,14 +100,25 @@ def load_workbook(
             )
         frame[column] = values.astype(str)
 
+    response_columns: list[str] = []
+    for _, column in VARIABLE_OPTIONS:
+        if column in frame:
+            numeric = pd.to_numeric(frame[column], errors="coerce")
+            frame[column] = numeric.mask(~np.isfinite(numeric))
+            response_columns.append(column)
+
     numeric_par = pd.to_numeric(frame["PAR"], errors="coerce")
     valid_par = numeric_par.notna() & np.isfinite(numeric_par)
-    if not bool(valid_par.all()):
-        invalid = int((~valid_par).sum())
+    rows_with_values = frame[response_columns].notna().any(axis=1)
+    invalid_measurements = ~valid_par & rows_with_values
+    if bool(invalid_measurements.any()):
+        invalid = int(invalid_measurements.sum())
         raise DataValidationError(
-            f"{path.name}: {invalid:,} row(s) have a non-numeric or infinite PAR."
+            f"{path.name}: {invalid:,} measurement row(s) have a non-numeric or infinite PAR."
         )
-    frame["PAR"] = numeric_par.astype(float)
+    # Rows without PAR or any supported response value are date/plant placeholders.
+    # Retaining them lets the UI show explicitly empty dates without plotting them.
+    frame["PAR"] = numeric_par.mask(~valid_par).astype(float)
 
     identity_values = frame[identity_column].astype("string").str.strip()
     identity_values = identity_values.mask(identity_values.eq(""))
@@ -121,11 +132,6 @@ def load_workbook(
 
     if "DAD" in frame:
         frame["DAD"] = pd.to_numeric(frame["DAD"], errors="coerce")
-
-    for _, column in VARIABLE_OPTIONS:
-        if column in frame:
-            numeric = pd.to_numeric(frame[column], errors="coerce")
-            frame[column] = numeric.mask(~np.isfinite(numeric))
 
     frame["DateText"] = frame["Date"].dt.strftime("%Y-%m-%d")
     frame["SourceRow"] = np.arange(2, len(frame) + 2, dtype=int)

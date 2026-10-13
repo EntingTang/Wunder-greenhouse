@@ -30,6 +30,8 @@ data/Tomato_LC_data_for_ts_plots.xlsx
 Each workbook must contain `Date`, `Label`, `Water`, `Nitrogen`, `PAR`, and
 either `Block` or `Replicate`. `DAD` is optional. A response variable is offered
 only when its source column exists and has at least one finite numeric value.
+Rows with no PAR and no supported response value are retained as date/plant
+placeholders, allowing single-plant date facets to report `No data` explicitly.
 
 ## Run locally
 

@@ -20,7 +20,7 @@ READ_ONLY_STATE_SUFFIXES = (
 
 
 st.set_page_config(
-    page_title="Greenhouse curve explorer",
+    page_title="Greenhouse data explorer",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
@@ -98,7 +98,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("Greenhouse curve explorer")
+st.title("Greenhouse data explorer")
 
 with st.sidebar:
     st.header("View controls")

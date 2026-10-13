@@ -665,10 +665,9 @@ def _render_single_plant(
     facet_columns: list[str] = []
     if date_facets:
         visible_dates, facet_columns = _date_facets(dates, frame)
-    mode_text = "Plant means after duplicate LC records are merged"
     title = (
         f"{crop} · {variable_label}<br>"
-        f"{label} · {water} × {nitrogen} · {_date_summary(dates, frame)} · {mode_text}"
+        f"{label} · {_date_summary(dates, frame)}"
     )
     spec = _build_spec(
         plot_data,

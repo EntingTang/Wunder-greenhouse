@@ -140,6 +140,10 @@ def _multiple_choice(
     )
 
 
+def _set_multiple_choice(key: str, selected: list) -> None:
+    st.session_state[key] = list(selected)
+
+
 def _default_plant_labels(labels: list[str], maximum: int = 5) -> list[str]:
     preferred = [label for label in labels if str(label).upper().startswith("DT-N0")]
     remaining = [label for label in labels if label not in preferred]
@@ -940,27 +944,50 @@ def _render_treatment_comparison(
     valid = valid.loc[valid[comparison_factor].isin(selected_levels)]
     other_preferred = NITROGEN_ORDER if other_factor == "Nitrogen" else WATER_ORDER
     other_levels = ordered_values(valid[other_factor], other_preferred)
-    display_options = [f"Fixed {other_factor}", f"Facet by {other_factor}"]
-    with factor_columns[other_factor]:
-        other_display = _single_choice(
-            f"{other_factor} display",
-            display_options,
-            _state_key(prefix, "other_display"),
-            default=display_options[0],
-            horizontal=True,
-        )
-    facet_factor: str | None = None
-    if other_display.startswith("Fixed"):
+    if other_factor == "Nitrogen":
+        other_levels_key = _state_key(prefix, "other_levels")
         with factor_columns[other_factor]:
-            fixed_level = _single_choice(
+            selected_other_levels = _multiple_choice(
                 other_factor,
                 other_levels,
-                _state_key(prefix, "fixed_other"),
+                other_levels_key,
+                default_all=True,
+                help_text="Each selected nitrogen level is shown in its own plot.",
             )
-        selected_other_levels = [fixed_level]
+            st.button(
+                "Select all",
+                key=_state_key(prefix, "select_all_nitrogen"),
+                on_click=_set_multiple_choice,
+                args=(other_levels_key, other_levels),
+                disabled=set(selected_other_levels) == set(other_levels),
+                width="stretch",
+            )
+        if not selected_other_levels:
+            st.info("Select at least one nitrogen level to compare.")
+            return
+        facet_factor: str | None = other_factor
     else:
-        selected_other_levels = other_levels
-        facet_factor = other_factor
+        display_options = [f"Fixed {other_factor}", f"Facet by {other_factor}"]
+        with factor_columns[other_factor]:
+            other_display = _single_choice(
+                f"{other_factor} display",
+                display_options,
+                _state_key(prefix, "other_display"),
+                default=display_options[0],
+                horizontal=True,
+            )
+        facet_factor = None
+        if other_display.startswith("Fixed"):
+            with factor_columns[other_factor]:
+                fixed_level = _single_choice(
+                    other_factor,
+                    other_levels,
+                    _state_key(prefix, "fixed_other"),
+                )
+            selected_other_levels = [fixed_level]
+        else:
+            selected_other_levels = other_levels
+            facet_factor = other_factor
 
     scoped = frame.loc[
         frame[comparison_factor].isin(selected_levels)
@@ -1005,9 +1032,14 @@ def _render_treatment_comparison(
     facet_rows = (
         [f"{facet_factor}: {value}" for value in selected_other_levels] if facet_factor else []
     )
-    other_context = (
-        f"{other_factor} facets" if facet_factor else f"{other_factor} {selected_other_levels[0]}"
-    )
+    if other_factor == "Nitrogen":
+        other_context = f"Nitrogen {', '.join(selected_other_levels)}"
+    else:
+        other_context = (
+            f"{other_factor} facets"
+            if facet_factor
+            else f"{other_factor} {selected_other_levels[0]}"
+        )
     calculation = (
         "Equal-date period mean ± SD" if presentation == "Period summary" else "Daily plant mean ± SD"
     )

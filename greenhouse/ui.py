@@ -898,8 +898,7 @@ def _render_individual_comparison(
     )
     title = (
         f"{crop} · {variable_label}<br>"
-        f"{len(selected_labels)} plants · {format_date(pd.Timestamp(date), frame)} · "
-        "Plant means after duplicate LC records are merged"
+        f"{len(selected_labels)} plants · {format_date(pd.Timestamp(date), frame)}"
     )
     spec = _build_spec(
         plot_data,

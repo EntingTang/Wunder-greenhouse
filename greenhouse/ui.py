@@ -746,7 +746,7 @@ def _render_treatment_curve(
     title = (
         f"{crop} · {variable_label}<br>"
         f"{water} × {nitrogen} · {_date_summary(dates, frame)} · "
-        f"{'Direct-record period summary' if presentation == 'Period summary' else 'Daily plant mean ± SD'}"
+        f"{'Equal-date period mean ± SD' if presentation == 'Period summary' else 'Daily plant mean ± SD'}"
     )
     spec = _build_spec(
         plot_data,
@@ -998,7 +998,7 @@ def _render_treatment_comparison(
         f"{other_factor} facets" if facet_factor else f"{other_factor} {selected_other_levels[0]}"
     )
     calculation = (
-        "Direct-record period summary" if presentation == "Period summary" else "Daily plant mean ± SD"
+        "Equal-date period mean ± SD" if presentation == "Period summary" else "Daily plant mean ± SD"
     )
     title = (
         f"{crop} · {variable_label}<br>"

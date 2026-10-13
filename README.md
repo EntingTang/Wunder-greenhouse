@@ -74,12 +74,19 @@ Daily treatment statistics are calculated across those plant points for:
 Date × Water × Nitrogen × PAR
 ```
 
-Period summaries first average all selected, valid raw records within:
+Period summaries first average duplicate valid records within:
+
+```text
+Date × Label × Water × Nitrogen × PAR
+```
+
+The resulting daily plant means are averaged within:
 
 ```text
 Label × Water × Nitrogen × PAR
 ```
 
-They then calculate treatment mean, sample SD (`ddof=1`), and `n`. This means a
-date with more records has more weight in its plant's period mean. When `n = 1`,
-the mean remains visible and SD is reported as not estimable.
+Each selected date with a valid daily plant mean therefore contributes equally
+to that plant's period mean. Treatment mean, sample SD (`ddof=1`), and `n` are
+then calculated across plant-period means. When `n = 1`, the mean remains
+visible and SD is reported as not estimable.

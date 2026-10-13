@@ -1,151 +1,117 @@
-import streamlit as st
-import pandas as pd
-import math
+"""Streamlit entry point for the greenhouse light-response curve dashboard."""
+
 from pathlib import Path
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+import streamlit as st
+
+from greenhouse.ui import render_crop_panel
+
+
+APP_ROOT = Path(__file__).resolve().parent
+DATA_FILES = {
+    "Potato": APP_ROOT / "data" / "Potato_LC_data_for_ts_plots.xlsx",
+    "Tomato": APP_ROOT / "data" / "Tomato_LC_data_for_ts_plots.xlsx",
+}
+READ_ONLY_STATE_SUFFIXES = (
+    "__interactive_plot",
+    "_button",
+    "_download",
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+st.set_page_config(
+    page_title="Greenhouse curve explorer",
+    page_icon=None,
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
+# Keep crop-specific widget values when only the selected crop panel is rendered.
+for state_key in list(st.session_state):
+    is_crop_state = state_key.startswith("greenhouse__")
+    is_read_only = state_key.endswith(READ_ONLY_STATE_SUFFIXES)
+    if is_crop_state and not is_read_only:
+        st.session_state[state_key] = st.session_state[state_key]
+
+st.markdown(
     """
+    <style>
+      :root {
+        --ink: #1d2924;
+        --muted: #5f6f67;
+        --line: #dce5df;
+        --surface: #f7faf7;
+        --accent: #34735a;
+      }
+      html, body, .stApp {
+        font-family: "Geist", "Aptos", "Segoe UI", sans-serif;
+        color: var(--ink);
+      }
+      .material-symbols-rounded,
+      [data-testid="stIconMaterial"] {
+        font-family: "Material Symbols Rounded" !important;
+        font-weight: normal !important;
+        font-style: normal !important;
+      }
+      .stApp { background: #fbfdfb; }
+      .block-container {
+        max-width: 1680px;
+        padding-top: 2.25rem;
+        padding-bottom: 4rem;
+      }
+      h1, h2, h3, h4 { letter-spacing: -0.025em; }
+      h1 { font-size: clamp(2.1rem, 4vw, 3.65rem) !important; line-height: 1 !important; }
+      h3 { margin-top: 0.2rem !important; }
+      [data-testid="stCaptionContainer"] { color: var(--muted); }
+      div[role="radiogroup"] {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding: 0.2rem 0 0.55rem;
+        scrollbar-width: thin;
+      }
+      div[role="radiogroup"] > label {
+        flex: 0 0 auto;
+        border-radius: 999px;
+        transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms ease;
+      }
+      div[role="radiogroup"] > label:active { transform: translateY(1px); }
+      .section-rule {
+        border-top: 1px solid var(--line);
+        margin: 0.25rem 0 1rem;
+      }
+      [data-testid="stDownloadButton"] button {
+        border-color: #b9c9bf;
+        transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), background 180ms ease;
+      }
+      [data-testid="stDownloadButton"] button:active { transform: translateY(1px); }
+      [data-testid="stAlertContainer"] { border-radius: 0.75rem; }
+      [data-baseweb="tag"] {
+        background-color: #e5eee8 !important;
+        color: #20352b !important;
+      }
+      [data-baseweb="tag"] span { color: #20352b !important; }
+      @media (max-width: 768px) {
+        .block-container { padding: 1.2rem 1rem 3rem; }
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+st.title("Greenhouse curve explorer")
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
+with st.sidebar:
+    st.header("View controls")
+    selected_crop = st.radio(
+        "Crop",
+        list(DATA_FILES),
+        key="greenhouse__crop",
+    )
+    selected_analysis = st.radio(
+        "Analysis",
+        ["Explore Data", "Compare Data"],
+        key=f"greenhouse__{selected_crop.lower()}__function",
     )
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+render_crop_panel(selected_crop, DATA_FILES[selected_crop], selected_analysis)
 
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )

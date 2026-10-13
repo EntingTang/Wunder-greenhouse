@@ -86,27 +86,24 @@ def aggregate_period_treatment(
     frame: pd.DataFrame,
     variable: str,
 ) -> tuple[pd.DataFrame, int, int]:
-    """Apply the Facet-script period calculation in its original order.
+    """Compute period statistics with equal weight for each available date.
 
-    Records are averaged directly within plant and treatment across the selected
-    dates. Dates with more valid records therefore contribute more weight to that
-    plant's period mean.
+    Duplicate records are first averaged within plant, date, treatment, and PAR.
+    Those daily plant means are then averaged across the selected dates so each
+    available date contributes equally to that plant's period mean.
     """
 
-    total = len(frame)
-    valid_mask = valid_value_mask(frame, variable)
-    invalid_count = int((~valid_mask).sum())
-    valid = frame.loc[valid_mask].copy()
-    if valid.empty:
+    daily_plants, invalid_count, total = aggregate_individual(frame, variable)
+    if daily_plants.empty:
         return pd.DataFrame(), invalid_count, total
 
     plant_means = (
-        valid.groupby(PERIOD_PLANT_GROUPS, observed=True, dropna=False)
+        daily_plants.groupby(PERIOD_PLANT_GROUPS, observed=True, dropna=False)
         .agg(
-            Value=(variable, "mean"),
+            Value=("Value", "mean"),
             PlantUnit=("PlantUnit", "first"),
             PlantUnitColumn=("PlantUnitColumn", "first"),
-            RawRecords=("SourceRow", "count"),
+            RawRecords=("RawRecords", "sum"),
         )
         .reset_index()
     )

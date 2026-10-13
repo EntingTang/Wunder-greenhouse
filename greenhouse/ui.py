@@ -39,8 +39,18 @@ from greenhouse.statistics import (
 WATER_ORDER = ("WW", "DT", "RW")
 NITROGEN_ORDER = ("N0", "N1", "N2")
 REWATERING_DATE = pd.Timestamp("2024-12-06")
-BEFORE_REWATERING_COLORS = ("#2F6F8F", "#4387A8", "#62A0BC", "#86B8CD", "#A8CCDA")
-AFTER_REWATERING_COLORS = ("#B7632B", "#CA7A3D", "#D99354", "#E3AD72", "#EBC894", "#F1DDB8")
+DATE_COLORS = (
+    "#236A8C",
+    "#C65D21",
+    "#3B7D4F",
+    "#8B4F9F",
+    "#B47D00",
+    "#A63D5B",
+    "#247B78",
+    "#8C4A32",
+    "#4D5FA3",
+    "#6F7035",
+)
 LINE_MODE_LABELS = {
     "Points + lines": "lines+markers",
     "Points": "markers",
@@ -390,18 +400,10 @@ def _style_maps(frame: pd.DataFrame) -> tuple[dict[str, str], list[str], list[st
     nitrogens = ordered_values(frame["Nitrogen"], NITROGEN_ORDER)
     colors = stable_color_map(waters, WATER_COLORS)
     colors.update(stable_color_map(nitrogens, NITROGEN_COLORS))
-    before_dates = [value for value in ordered_dates if value < REWATERING_DATE]
-    after_dates = [value for value in ordered_dates if value >= REWATERING_DATE]
     colors.update(
         {
-            value.strftime("%Y-%m-%d"): BEFORE_REWATERING_COLORS[index % len(BEFORE_REWATERING_COLORS)]
-            for index, value in enumerate(before_dates)
-        }
-    )
-    colors.update(
-        {
-            value.strftime("%Y-%m-%d"): AFTER_REWATERING_COLORS[index % len(AFTER_REWATERING_COLORS)]
-            for index, value in enumerate(after_dates)
+            value.strftime("%Y-%m-%d"): DATE_COLORS[index % len(DATE_COLORS)]
+            for index, value in enumerate(ordered_dates)
         }
     )
     colors.update(stable_color_map(labels))

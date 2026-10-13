@@ -140,10 +140,6 @@ def _multiple_choice(
     )
 
 
-def _set_multiple_choice(key: str, selected: list) -> None:
-    st.session_state[key] = list(selected)
-
-
 def _default_plant_labels(labels: list[str], maximum: int = 5) -> list[str]:
     preferred = [label for label in labels if str(label).upper().startswith("DT-N0")]
     remaining = [label for label in labels if label not in preferred]
@@ -945,22 +941,13 @@ def _render_treatment_comparison(
     other_preferred = NITROGEN_ORDER if other_factor == "Nitrogen" else WATER_ORDER
     other_levels = ordered_values(valid[other_factor], other_preferred)
     if other_factor == "Nitrogen":
-        other_levels_key = _state_key(prefix, "other_levels")
         with factor_columns[other_factor]:
             selected_other_levels = _multiple_choice(
                 other_factor,
                 other_levels,
-                other_levels_key,
+                _state_key(prefix, "other_levels"),
                 default_all=True,
                 help_text="Each selected nitrogen level is shown in its own plot.",
-            )
-            st.button(
-                "Select all",
-                key=_state_key(prefix, "select_all_nitrogen"),
-                on_click=_set_multiple_choice,
-                args=(other_levels_key, other_levels),
-                disabled=set(selected_other_levels) == set(other_levels),
-                width="stretch",
             )
         if not selected_other_levels:
             st.info("Select at least one nitrogen level to compare.")

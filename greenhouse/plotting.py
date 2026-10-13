@@ -172,7 +172,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
         cols=len(columns),
         shared_xaxes=True,
         shared_yaxes=True,
-        horizontal_spacing=min(0.055, 0.18 / max(1, len(columns) - 1)),
+        horizontal_spacing=min(0.035, 0.12 / max(1, len(columns) - 1)),
         vertical_spacing=0.11,
         subplot_titles=subplot_titles,
     )
@@ -358,6 +358,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
         sharex=True,
         sharey=True,
         figsize=(max(7.2, 4.8 * len(columns)), max(4.8, 3.8 * len(rows))),
+        gridspec_kw={"wspace": 0.08},
         constrained_layout=True,
     )
     x_range, y_range = _axis_range(spec)

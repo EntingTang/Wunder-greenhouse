@@ -607,7 +607,7 @@ def _render_single_plant(
     symbol_order: list[str],
     dash_order: list[str],
 ) -> None:
-    prefix = _state_key(crop, "explore", "single_plant", variable)
+    prefix = _state_key(crop, "explore", "single_plant")
     valid = frame.loc[valid_value_mask(frame, variable)]
     filter_columns = st.columns(3)
     water_options = ordered_values(valid["Water"], WATER_ORDER)
@@ -723,7 +723,7 @@ def _render_treatment_curve(
     symbol_order: list[str],
     dash_order: list[str],
 ) -> None:
-    prefix = _state_key(crop, "explore", "treatment_curve", variable)
+    prefix = _state_key(crop, "explore", "treatment_curve")
     valid = frame.loc[valid_value_mask(frame, variable)]
     filter_columns = st.columns(2)
     waters = ordered_values(valid["Water"], WATER_ORDER)
@@ -809,7 +809,7 @@ def _render_individual_comparison(
     symbol_order: list[str],
     dash_order: list[str],
 ) -> None:
-    prefix = _state_key(crop, "compare", "individual_plants", variable)
+    prefix = _state_key(crop, "compare", "individual_plants")
     valid = frame.loc[valid_value_mask(frame, variable)]
     filter_columns = st.columns([1, 1, 1.35])
     waters = ordered_values(valid["Water"], WATER_ORDER)
@@ -936,7 +936,7 @@ def _render_treatment_comparison(
     comparison_factor: str,
 ) -> None:
     other_factor = "Nitrogen" if comparison_factor == "Water" else "Water"
-    prefix = _state_key(crop, "compare", comparison_factor, variable)
+    prefix = _state_key(crop, "compare", comparison_factor)
     valid = frame.loc[valid_value_mask(frame, variable)]
     filter_columns = st.columns(2)
     factor_columns = {"Water": filter_columns[0], "Nitrogen": filter_columns[1]}

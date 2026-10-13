@@ -265,13 +265,15 @@ def _treatment_text(frame: pd.DataFrame) -> pd.Series:
     return frame["Water"].astype(str) + " × " + frame["Nitrogen"].astype(str)
 
 
-def _number(value: object) -> str:
+def _number(value: object, decimal_places: int | None = None) -> str:
     try:
         numeric = float(value)
     except (TypeError, ValueError):
         return "Not available"
     if not np.isfinite(numeric):
         return "Not estimable"
+    if decimal_places is not None:
+        return f"{numeric:.{decimal_places}f}"
     return f"{numeric:.6g}"
 
 
@@ -382,8 +384,8 @@ def _prepare_summary_plot(
                 f"<b>{escape(str(row.Treatment))}</b>",
                 f"{context_label}: {escape(str(row.DateDisplay))}",
                 f"PAR: {_number(row.PAR)}",
-                f"Mean: {_number(row.Mean)}",
-                f"SD: {_number(row.SD)}",
+                f"Mean: {_number(row.Mean, decimal_places=3)}",
+                f"SD: {_number(row.SD, decimal_places=3)}",
                 f"n: {int(row.n):,}",
             ]
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from io import BytesIO
+from math import ceil
 
 import matplotlib
 
@@ -161,7 +162,9 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     has_column_facets = any(columns)
     show_legend = not _legend_duplicates_facet_titles(data, columns)
     facet_title_space = 50 if has_column_facets else 0
-    legend_space = 50 if show_legend else 0
+    legend_count = data["LegendLabel"].astype(str).nunique() if show_legend else 0
+    legend_rows = ceil(legend_count / 6) if legend_count else 0
+    legend_space = 80 + (32 * (legend_rows - 1)) if legend_rows else 0
     shared_axis_label_space = 12 if has_column_facets else 0
     base_height = max(520, 360 * len(rows))
     plot_height = max(1, base_height - 175)

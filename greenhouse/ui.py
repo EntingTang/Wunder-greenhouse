@@ -146,19 +146,25 @@ def _default_plant_labels(labels: list[str], maximum: int = 5) -> list[str]:
     return (preferred + remaining)[:maximum]
 
 
-def _sync_date_state(key: str, options: list[pd.Timestamp]) -> None:
+def _sync_date_state(
+    key: str,
+    options: list[pd.Timestamp],
+    *,
+    default: pd.Timestamp | None = None,
+) -> None:
     previous_options_key = f"{key}__available"
     previous_options = st.session_state.get(previous_options_key, [])
     current = st.session_state.get(key)
+    default_selection = [default] if default in options else options[-1:]
     if current is None:
-        selected = options[-1:]
+        selected = default_selection
     elif not current:
         selected = []
     else:
         was_all = bool(previous_options) and set(current) == set(previous_options)
         selected = list(options) if was_all else [value for value in current if value in options]
         if not selected:
-            selected = options[-1:]
+            selected = default_selection
     st.session_state[key] = selected
     st.session_state[previous_options_key] = list(options)
 
@@ -198,15 +204,20 @@ def _date_controls(
     variable: str,
     crop_frame: pd.DataFrame,
     prefix: str,
+    *,
+    include_empty_dates: bool = False,
 ) -> list[pd.Timestamp]:
     valid = frame.loc[valid_value_mask(frame, variable)]
-    dates = sorted(pd.Timestamp(value).normalize() for value in valid["Date"].unique())
+    valid_dates = sorted(pd.Timestamp(value).normalize() for value in valid["Date"].unique())
+    date_source = frame if include_empty_dates else valid
+    dates = sorted(pd.Timestamp(value).normalize() for value in date_source["Date"].unique())
     if not dates:
         return []
 
     format_func = lambda value: format_date(pd.Timestamp(value), crop_frame)
     date_key = _state_key(prefix, "dates")
-    _sync_date_state(date_key, dates)
+    default_date = valid_dates[-1] if valid_dates else dates[-1]
+    _sync_date_state(date_key, dates, default=default_date)
     before_dates = [date for date in dates if date < REWATERING_DATE]
     after_dates = [date for date in dates if date >= REWATERING_DATE]
     if before_dates and after_dates:
@@ -630,7 +641,16 @@ def _render_single_plant(
         & frame["Label"].eq(label)
     ]
     with st.container():
-        dates = _date_controls(scoped, variable, frame, prefix)
+        # Keep the crop-wide date domain stable when switching plants. A selected
+        # plant can legitimately have no valid measurements on one of these dates;
+        # its empty facet is rendered as "No data" instead of dropping the date.
+        dates = _date_controls(
+            frame,
+            variable,
+            frame,
+            prefix,
+            include_empty_dates=True,
+        )
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return

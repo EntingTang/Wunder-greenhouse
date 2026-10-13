@@ -140,6 +140,12 @@ def _multiple_choice(
     )
 
 
+def _default_plant_labels(labels: list[str], maximum: int = 5) -> list[str]:
+    preferred = [label for label in labels if str(label).upper().startswith("DT-N0")]
+    remaining = [label for label in labels if label not in preferred]
+    return (preferred + remaining)[:maximum]
+
+
 def _sync_date_state(key: str, options: list[pd.Timestamp]) -> None:
     previous_options_key = f"{key}__available"
     previous_options = st.session_state.get(previous_options_key, [])
@@ -814,11 +820,14 @@ def _render_individual_comparison(
         )
     valid = valid.loc[valid["Date"].eq(date)]
     labels = ordered_values(valid["Label"])
+    labels_key = _state_key(prefix, "labels")
+    if labels_key not in st.session_state:
+        st.session_state[labels_key] = _default_plant_labels(labels)
     selected_labels = _multiple_choice(
         "Plants",
         labels,
-        _state_key(prefix, "labels"),
-        default_all=True,
+        labels_key,
+        default_all=False,
         help_text="Each plant is identified by its Label in the uploaded workbook.",
     )
     if not selected_waters or not selected_nitrogens or not selected_labels:

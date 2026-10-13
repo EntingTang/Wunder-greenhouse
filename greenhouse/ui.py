@@ -665,10 +665,9 @@ def _render_single_plant(
     facet_columns: list[str] = []
     if date_facets:
         visible_dates, facet_columns = _date_facets(dates, frame)
-    mode_text = "Plant means after duplicate LC records are merged"
     title = (
         f"{crop} · {variable_label}<br>"
-        f"{label} · {water} × {nitrogen} · {_date_summary(dates, frame)} · {mode_text}"
+        f"{label} · {_date_summary(dates, frame)}"
     )
     spec = _build_spec(
         plot_data,
@@ -753,8 +752,7 @@ def _render_treatment_curve(
         visible_dates, facet_columns = _date_facets(dates, frame)
     title = (
         f"{crop} · {variable_label}<br>"
-        f"{water} × {nitrogen} · {_date_summary(dates, frame)} · "
-        f"{'Equal-date period mean ± SD' if presentation == 'Period summary' else 'Daily plant mean ± SD'}"
+        f"{water} × {nitrogen} · {_date_summary(dates, frame)}"
     )
     spec = _build_spec(
         plot_data,
@@ -940,27 +938,18 @@ def _render_treatment_comparison(
     valid = valid.loc[valid[comparison_factor].isin(selected_levels)]
     other_preferred = NITROGEN_ORDER if other_factor == "Nitrogen" else WATER_ORDER
     other_levels = ordered_values(valid[other_factor], other_preferred)
-    display_options = [f"Fixed {other_factor}", f"Facet by {other_factor}"]
     with factor_columns[other_factor]:
-        other_display = _single_choice(
-            f"{other_factor} display",
-            display_options,
-            _state_key(prefix, "other_display"),
-            default=display_options[0],
-            horizontal=True,
+        selected_other_levels = _multiple_choice(
+            other_factor,
+            other_levels,
+            _state_key(prefix, "other_levels"),
+            default_all=True,
+            help_text=f"Each selected {other_factor.lower()} level is shown in its own plot.",
         )
-    facet_factor: str | None = None
-    if other_display.startswith("Fixed"):
-        with factor_columns[other_factor]:
-            fixed_level = _single_choice(
-                other_factor,
-                other_levels,
-                _state_key(prefix, "fixed_other"),
-            )
-        selected_other_levels = [fixed_level]
-    else:
-        selected_other_levels = other_levels
-        facet_factor = other_factor
+    if not selected_other_levels:
+        st.info(f"Select at least one {other_factor.lower()} level to compare.")
+        return
+    facet_factor: str | None = other_factor
 
     scoped = frame.loc[
         frame[comparison_factor].isin(selected_levels)
@@ -1005,15 +994,10 @@ def _render_treatment_comparison(
     facet_rows = (
         [f"{facet_factor}: {value}" for value in selected_other_levels] if facet_factor else []
     )
-    other_context = (
-        f"{other_factor} facets" if facet_factor else f"{other_factor} {selected_other_levels[0]}"
-    )
-    calculation = (
-        "Equal-date period mean ± SD" if presentation == "Period summary" else "Daily plant mean ± SD"
-    )
+    other_context = f"{other_factor} {', '.join(selected_other_levels)}"
     title = (
         f"{crop} · {variable_label}<br>"
-        f"{comparison_factor} comparison · {other_context} · {_date_summary(dates, frame)} · {calculation}"
+        f"{comparison_factor} comparison · {other_context} · {_date_summary(dates, frame)}"
     )
     spec = _build_spec(
         plot_data,

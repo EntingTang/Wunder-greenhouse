@@ -168,7 +168,10 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     shared_axis_label_space = 12 if has_column_facets else 0
     base_height = max(520, 360 * len(rows))
     plot_height = max(1, base_height - 175)
-    legend_y = 1.02 + (facet_title_space / plot_height)
+    # Keep the legend below long, two-line titles while retaining a clear gap
+    # above the date-facet headings.
+    title_legend_clearance = 36 if has_column_facets and legend_rows else 0
+    legend_y = 1.02 + (max(0, facet_title_space - title_legend_clearance) / plot_height)
     subplot_titles = [column if row_index == 0 else "" for row_index, _ in enumerate(rows) for column in columns]
     figure = make_subplots(
         rows=len(rows),
@@ -190,6 +193,17 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             if "FacetColumn" in panel:
                 panel = panel.loc[panel["FacetColumn"].astype(str).eq(column_value)]
             if panel.empty:
+                figure.update_xaxes(range=x_range, row=row_index, col=column_index)
+                figure.update_yaxes(range=y_range, row=row_index, col=column_index)
+                figure.add_annotation(
+                    text="No data",
+                    x=sum(x_range) / 2,
+                    y=sum(y_range) / 2,
+                    showarrow=False,
+                    font={"size": 16, "color": "#64748B"},
+                    row=row_index,
+                    col=column_index,
+                )
                 continue
 
             for _, series in panel.groupby("SeriesKey", observed=True, sort=False):
@@ -376,6 +390,18 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                 panel = panel.loc[panel["FacetRow"].astype(str).eq(row_value)]
             if "FacetColumn" in panel:
                 panel = panel.loc[panel["FacetColumn"].astype(str).eq(column_value)]
+
+            if panel.empty:
+                axis.text(
+                    0.5,
+                    0.5,
+                    "No data",
+                    transform=axis.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=12,
+                    color="#64748B",
+                )
 
             for _, series in panel.groupby("SeriesKey", observed=True, sort=False):
                 series = series.sort_values("PAR", kind="stable")

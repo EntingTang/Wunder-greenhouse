@@ -966,7 +966,7 @@ def _render_treatment_comparison(
     if len(dates) > 1:
         presentation = _single_choice(
             "Date display",
-            ["Period summary", "Date facets", "Overlay dates"],
+            ["Period summary", "Date facets"],
             _state_key(prefix, "date_display"),
             default="Period summary",
             horizontal=True,
@@ -1018,7 +1018,7 @@ def _render_treatment_comparison(
         symbol_order=symbol_order,
         dash_order=dash_order,
         summary=True,
-        show_ribbon=presentation != "Overlay dates",
+        show_ribbon=True,
     )
     export = _export_table(plot_data, variable_label, identity_column)
     _render_result(

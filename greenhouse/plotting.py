@@ -236,6 +236,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                             go.Scatter(
                                 x=pd.concat([ribbon[spec.x_column], ribbon[spec.x_column].iloc[::-1]]),
                                 y=pd.concat([upper, lower.iloc[::-1]]),
+                                mode="lines",
                                 fill="toself",
                                 fillcolor=_rgba(color, 0.16),
                                 line={"width": 0},

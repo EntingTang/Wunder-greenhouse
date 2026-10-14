@@ -12,6 +12,8 @@ import streamlit as st
 
 from greenhouse.data import (
     DataValidationError,
+    LIGHT_RESPONSE_GROUP,
+    VARIABLE_GROUPS,
     VARIABLE_LABELS,
     available_variables,
     file_signature,
@@ -206,6 +208,7 @@ def _date_controls(
     prefix: str,
     *,
     include_empty_dates: bool = False,
+    time_series: bool = False,
 ) -> list[pd.Timestamp]:
     valid = frame.loc[valid_value_mask(frame, variable)]
     valid_dates = sorted(pd.Timestamp(value).normalize() for value in valid["Date"].unique())
@@ -215,8 +218,10 @@ def _date_controls(
         return []
 
     format_func = lambda value: format_date(pd.Timestamp(value), crop_frame)
-    date_key = _state_key(prefix, "dates")
+    date_key = _state_key(prefix, "measurement_dates" if time_series else "dates")
     default_date = valid_dates[-1] if valid_dates else dates[-1]
+    if time_series and date_key not in st.session_state:
+        st.session_state[date_key] = list(dates)
     _sync_date_state(date_key, dates, default=default_date)
     before_dates = [date for date in dates if date < REWATERING_DATE]
     after_dates = [date for date in dates if date >= REWATERING_DATE]
@@ -336,7 +341,7 @@ def _prepare_individual_plot(
                 f"<b>{escape(str(row.Label))}</b>",
                 f"Date: {escape(str(row.DateDisplay))}",
                 f"Treatment: {escape(str(row.Treatment))}",
-                f"PAR: {_number(row.PAR)}",
+                *([f"PAR: {_number(row.PAR)}"] if "PAR" in plot else []),
                 f"Value: {_number(row.Value, decimal_places=3)}",
                 f"Merged records: {int(row.RawRecords):,}",
             ]
@@ -400,7 +405,7 @@ def _prepare_summary_plot(
             [
                 f"<b>{escape(str(row.Treatment))}</b>",
                 f"{context_label}: {escape(str(row.DateDisplay))}",
-                f"PAR: {_number(row.PAR)}",
+                *([f"PAR: {_number(row.PAR)}"] if "PAR" in plot else []),
                 f"Mean: {_number(row.Mean, decimal_places=3)}",
                 f"SD: {_number(row.SD, decimal_places=3)}",
                 f"n: {int(row.n):,}",
@@ -576,6 +581,7 @@ def _build_spec(
     dash_order: list[str],
     summary: bool,
     show_ribbon: bool | None = None,
+    time_series: bool = False,
 ) -> PlotSpec:
     visible = plot_data
     if visible_dates is not None and "Date" in plot_data:
@@ -594,6 +600,8 @@ def _build_spec(
         facet_rows=facet_rows,
         facet_columns=facet_columns,
         show_ribbon=summary if show_ribbon is None else show_ribbon,
+        x_column="Date" if time_series else "PAR",
+        x_label="Measurement date" if time_series else "PAR (µmol m⁻² s⁻¹)",
     )
 
 
@@ -606,6 +614,8 @@ def _render_single_plant(
     color_map: dict[str, str],
     symbol_order: list[str],
     dash_order: list[str],
+    *,
+    time_series: bool = False,
 ) -> None:
     prefix = _state_key(crop, "explore", "single_plant")
     valid = frame.loc[valid_value_mask(frame, variable)]
@@ -650,13 +660,14 @@ def _render_single_plant(
             frame,
             prefix,
             include_empty_dates=True,
+            time_series=time_series,
         )
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
 
     presentation = "Single date"
-    if len(dates) > 1:
+    if len(dates) > 1 and not time_series:
         presentation = _single_choice(
             "Date display",
             ["Date facets", "Overlay dates"],
@@ -665,7 +676,7 @@ def _render_single_plant(
             horizontal=True,
         )
     selected = scoped.loc[scoped["Date"].isin(dates)]
-    plants, invalid_count, total_count = aggregate_individual(selected, variable)
+    plants, invalid_count, total_count = aggregate_individual(selected, variable, time_series)
     if plants.empty:
         st.info("No valid measurements remain for this plant and date selection.")
         return
@@ -701,6 +712,7 @@ def _render_single_plant(
         symbol_order=symbol_order,
         dash_order=dash_order,
         summary=False,
+        time_series=time_series,
     )
     export = _export_table(plot_data, variable_label, identity_column)
     _render_result(
@@ -722,6 +734,8 @@ def _render_treatment_curve(
     color_map: dict[str, str],
     symbol_order: list[str],
     dash_order: list[str],
+    *,
+    time_series: bool = False,
 ) -> None:
     prefix = _state_key(crop, "explore", "treatment_curve")
     valid = frame.loc[valid_value_mask(frame, variable)]
@@ -735,13 +749,13 @@ def _render_treatment_curve(
         nitrogen = _single_choice("Nitrogen", nitrogens, _state_key(prefix, "nitrogen"))
     scoped = frame.loc[frame["Water"].eq(water) & frame["Nitrogen"].eq(nitrogen)]
     with st.container():
-        dates = _date_controls(scoped, variable, frame, prefix)
+        dates = _date_controls(scoped, variable, frame, prefix, time_series=time_series)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
 
     presentation = "Single date"
-    if len(dates) > 1:
+    if len(dates) > 1 and not time_series:
         presentation = _single_choice(
             "Date display",
             ["Period summary", "Date facets", "Overlay dates"],
@@ -753,7 +767,7 @@ def _render_treatment_curve(
     if presentation == "Period summary":
         summary, invalid_count, total_count = aggregate_period_treatment(selected, variable)
     else:
-        summary, invalid_count, total_count = aggregate_daily_treatment(selected, variable)
+        summary, invalid_count, total_count = aggregate_daily_treatment(selected, variable, time_series)
     if summary.empty:
         st.info("No valid treatment measurements remain for this selection.")
         return
@@ -787,6 +801,7 @@ def _render_treatment_curve(
         dash_order=dash_order,
         summary=True,
         show_ribbon=presentation != "Overlay dates",
+        time_series=time_series,
     )
     export = _export_table(plot_data, variable_label, identity_column)
     _render_result(
@@ -808,10 +823,12 @@ def _render_individual_comparison(
     color_map: dict[str, str],
     symbol_order: list[str],
     dash_order: list[str],
+    *,
+    time_series: bool = False,
 ) -> None:
     prefix = _state_key(crop, "compare", "individual_plants")
     valid = frame.loc[valid_value_mask(frame, variable)]
-    filter_columns = st.columns([1, 1, 1.35])
+    filter_columns = st.columns(2)
     waters = ordered_values(valid["Water"], WATER_ORDER)
     with filter_columns[0]:
         selected_waters = _multiple_choice(
@@ -828,7 +845,9 @@ def _render_individual_comparison(
     if not dates:
         st.info("No dates contain valid measurements for these treatments.")
         return
-    with filter_columns[2]:
+    if time_series:
+        selected_dates = _date_controls(valid, variable, frame, prefix, time_series=True)
+    else:
         date = _single_choice(
             "Date",
             dates,
@@ -836,7 +855,11 @@ def _render_individual_comparison(
             default=dates[-1],
             format_func=lambda value: format_date(pd.Timestamp(value), frame),
         )
-    valid = valid.loc[valid["Date"].eq(date)]
+        selected_dates = [date]
+    if not selected_dates:
+        st.info("Select at least one date with valid measurements.")
+        return
+    valid = valid.loc[valid["Date"].isin(selected_dates)]
     labels = ordered_values(valid["Label"])
     labels_key = _state_key(prefix, "labels")
     if labels_key not in st.session_state:
@@ -878,12 +901,12 @@ def _render_individual_comparison(
     symbol_column = "PlantUnit" if symbol_label == identity_column else symbol_label
 
     selected = frame.loc[
-        frame["Date"].eq(date)
+        frame["Date"].isin(selected_dates)
         & frame["Water"].isin(selected_waters)
         & frame["Nitrogen"].isin(selected_nitrogens)
         & frame["Label"].isin(selected_labels)
     ]
-    plants, invalid_count, total_count = aggregate_individual(selected, variable)
+    plants, invalid_count, total_count = aggregate_individual(selected, variable, time_series)
     if plants.empty:
         st.info("No valid plant measurements remain for this selection.")
         return
@@ -898,7 +921,7 @@ def _render_individual_comparison(
     )
     title = (
         f"{crop} · {variable_label}<br>"
-        f"{len(selected_labels)} plants · {format_date(pd.Timestamp(date), frame)}"
+        f"{len(selected_labels)} plants · {_date_summary(selected_dates, frame)}"
     )
     spec = _build_spec(
         plot_data,
@@ -912,6 +935,7 @@ def _render_individual_comparison(
         symbol_order=symbol_order,
         dash_order=dash_order,
         summary=False,
+        time_series=time_series,
     )
     export = _export_table(plot_data, variable_label, identity_column)
     _render_result(
@@ -934,6 +958,8 @@ def _render_treatment_comparison(
     symbol_order: list[str],
     dash_order: list[str],
     comparison_factor: str,
+    *,
+    time_series: bool = False,
 ) -> None:
     other_factor = "Nitrogen" if comparison_factor == "Water" else "Water"
     prefix = _state_key(crop, "compare", comparison_factor)
@@ -975,12 +1001,12 @@ def _render_treatment_comparison(
         & frame[other_factor].isin(selected_other_levels)
     ]
     with st.container():
-        dates = _date_controls(scoped, variable, frame, prefix)
+        dates = _date_controls(scoped, variable, frame, prefix, time_series=time_series)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
     presentation = "Single date"
-    if len(dates) > 1:
+    if len(dates) > 1 and not time_series:
         presentation = _single_choice(
             "Date display",
             ["Period summary", "Date facets"],
@@ -993,7 +1019,7 @@ def _render_treatment_comparison(
     if presentation == "Period summary":
         summary, invalid_count, total_count = aggregate_period_treatment(selected, variable)
     else:
-        summary, invalid_count, total_count = aggregate_daily_treatment(selected, variable)
+        summary, invalid_count, total_count = aggregate_daily_treatment(selected, variable, time_series)
     if summary.empty:
         st.info("No valid treatment measurements remain for this selection.")
         return
@@ -1031,6 +1057,7 @@ def _render_treatment_comparison(
         dash_order=dash_order,
         summary=True,
         show_ribbon=True,
+        time_series=time_series,
     )
     export = _export_table(plot_data, variable_label, identity_column)
     _render_result(
@@ -1043,38 +1070,51 @@ def _render_treatment_comparison(
     )
 
 
-def render_crop_panel(crop: str, path: Path, function: str) -> None:
+def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: str) -> None:
     """Render one isolated crop panel, including its own load errors and state."""
 
-    st.markdown(f"### {crop} light-response curves")
+    st.markdown(f"### {crop}")
+    group_key = _state_key(crop, "variable_group")
+    if st.session_state.get(group_key) not in VARIABLE_GROUPS:
+        st.session_state[group_key] = LIGHT_RESPONSE_GROUP
+    heading_column, group_column = st.columns([1.1, 4], vertical_alignment="center")
+    with heading_column:
+        st.markdown("#### Response variable")
+    with group_column:
+        group = st.segmented_control(
+            "Variable group",
+            list(VARIABLE_GROUPS),
+            required=True,
+            key=group_key,
+            label_visibility="collapsed",
+        )
+    time_series = group != LIGHT_RESPONSE_GROUP
+    path = measurements_path if time_series else path
     if not path.exists():
         st.error(f"Data file not found: {path.name}")
         return
     try:
         modified_time_ns, file_size = file_signature(path)
-        frame = load_workbook(str(path.resolve()), modified_time_ns, file_size)
+        frame = load_workbook(
+            str(path.resolve()), modified_time_ns, file_size, light_response=not time_series
+        )
     except (OSError, DataValidationError) as exc:
         st.error(str(exc))
         return
 
-    variables = available_variables(frame)
+    variables = available_variables(frame, group)
     if not variables:
         st.error(
-            f"{path.name} does not contain valid numeric data in any supported response variable."
+            f"{path.name} does not contain valid numeric data for {group}."
         )
         return
     labels_by_column = {column: label for label, column in variables}
     columns = list(labels_by_column)
     default_variable = "Y(II)_calc" if "Y(II)_calc" in columns else columns[0]
-    variable_key = _state_key(crop, "variable")
+    variable_key = _state_key(crop, "variable", group)
     if st.session_state.get(variable_key) not in columns:
         st.session_state[variable_key] = default_variable
 
-    st.caption(
-        f"{len(frame):,} records · {frame['Label'].nunique():,} plants · "
-        f"{frame['Date'].nunique():,} dates · source: {path.name}"
-    )
-    st.markdown("#### Response variable")
     variable = st.radio(
         "Response variable",
         columns,
@@ -1084,6 +1124,10 @@ def render_crop_panel(crop: str, path: Path, function: str) -> None:
         label_visibility="collapsed",
     )
     variable_label = VARIABLE_LABELS[variable]
+    st.caption(
+        f"{len(frame):,} records · {frame['Label'].nunique():,} plants · "
+        f"{frame['Date'].nunique():,} dates · source: {path.name}"
+    )
     st.markdown('<div class="section-rule"></div>', unsafe_allow_html=True)
 
     color_map, symbol_order, dash_order = _style_maps(frame)
@@ -1108,6 +1152,7 @@ def render_crop_panel(crop: str, path: Path, function: str) -> None:
                 color_map,
                 symbol_order,
                 dash_order,
+                time_series=time_series,
             )
         else:
             _render_treatment_curve(
@@ -1119,6 +1164,7 @@ def render_crop_panel(crop: str, path: Path, function: str) -> None:
                 color_map,
                 symbol_order,
                 dash_order,
+                time_series=time_series,
             )
     else:
         plot_kind = _single_choice(
@@ -1139,6 +1185,7 @@ def render_crop_panel(crop: str, path: Path, function: str) -> None:
                 color_map,
                 symbol_order,
                 dash_order,
+                time_series=time_series,
             )
         elif plot_kind == "Water treatments":
             _render_treatment_comparison(
@@ -1151,6 +1198,7 @@ def render_crop_panel(crop: str, path: Path, function: str) -> None:
                 symbol_order,
                 dash_order,
                 "Water",
+                time_series=time_series,
             )
         else:
             _render_treatment_comparison(
@@ -1163,4 +1211,5 @@ def render_crop_panel(crop: str, path: Path, function: str) -> None:
                 symbol_order,
                 dash_order,
                 "Nitrogen",
+                time_series=time_series,
             )

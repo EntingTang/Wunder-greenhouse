@@ -5,6 +5,7 @@ from pathlib import Path
 import streamlit as st
 
 from greenhouse.ui import render_crop_panel
+from greenhouse.model_validation import render_model_validation
 
 
 APP_ROOT = Path(__file__).resolve().parent
@@ -15,6 +16,10 @@ DATA_FILES = {
 MEASUREMENT_FILES = {
     "Potato": APP_ROOT / "data" / "Potato_meteo_HH2_LSA_biomass_OJIP_tillHarvest_LSA_updated.xlsx",
     "Tomato": APP_ROOT / "data" / "LMM_tomato_input_tillHarvest_LSA_updated.xlsx",
+}
+MODEL_FILES = {
+    "Potato": APP_ROOT / "data" / "Potato_ye_ETR_YII_model_results.xlsx",
+    "Tomato": APP_ROOT / "data" / "Tomato_ye_ETR_YII_results.xlsx",
 }
 READ_ONLY_STATE_SUFFIXES = (
     "__interactive_plot",
@@ -113,11 +118,14 @@ with st.sidebar:
     )
     selected_analysis = st.radio(
         "Analysis",
-        ["Explore Data", "Compare Data"],
+        ["Explore Data", "Compare Data", "Model validation"],
         key=f"greenhouse__{selected_crop.lower()}__function",
     )
 
-render_crop_panel(
-    selected_crop, DATA_FILES[selected_crop], MEASUREMENT_FILES[selected_crop], selected_analysis
-)
+if selected_analysis == "Model validation":
+    render_model_validation(selected_crop, MODEL_FILES[selected_crop])
+else:
+    render_crop_panel(
+        selected_crop, DATA_FILES[selected_crop], MEASUREMENT_FILES[selected_crop], selected_analysis
+    )
 

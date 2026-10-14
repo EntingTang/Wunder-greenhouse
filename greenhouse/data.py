@@ -84,6 +84,9 @@ VARIABLE_UNITS = {
     "SoilMoisture": "m³ m⁻³",
 }
 REQUIRED_COLUMNS = {"Date", "Label", "Water", "Nitrogen"}
+MODEL_NUMERIC_COLUMNS = (
+    "ETRII", "YII", "ETR_fit_Ye", "YII_fit_Ye", "Nk_N0_ETR", "Nk_N0_YII",
+)
 
 
 class DataValidationError(ValueError):
@@ -103,6 +106,7 @@ def load_workbook(
     modified_time_ns: int,
     file_size: int,
     light_response: bool = True,
+    sheet_name: str | int = 0,
 ) -> pd.DataFrame:
     """Read and normalize one crop workbook.
 
@@ -113,7 +117,7 @@ def load_workbook(
     del modified_time_ns, file_size
     path = Path(path_string)
     try:
-        frame = pd.read_excel(path, engine="openpyxl")
+        frame = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl")
     except Exception as exc:  # pandas/openpyxl provide useful details in the cause
         raise DataValidationError(f"Could not read {path.name}: {exc}") from exc
 
@@ -156,7 +160,7 @@ def load_workbook(
         frame[column] = values.astype(str)
 
     response_columns: list[str] = []
-    for _, column in VARIABLE_OPTIONS:
+    for column in [column for _, column in VARIABLE_OPTIONS] + list(MODEL_NUMERIC_COLUMNS):
         if column in frame:
             numeric = pd.to_numeric(frame[column], errors="coerce")
             frame[column] = numeric.mask(~np.isfinite(numeric))

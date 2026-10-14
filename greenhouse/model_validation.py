@@ -258,7 +258,9 @@ def render_model_validation(crop: str, path: Path) -> None:
     title_key = _state_key(crop, "model_validation", "plot_title")
     st.html(
         f"<style>.st-key-{title_key} h4 "
-        "{ margin: 0 !important; padding: 0 !important; }</style>"
+        "{ margin: 0 !important; padding: 0 !important; }"
+        f".st-key-{title_key} [data-testid='stButton'] "
+        "{ position: relative; top: 12px; }</style>"
     )
     with st.container(
         key=title_key, horizontal=True, vertical_alignment="center", gap="medium"

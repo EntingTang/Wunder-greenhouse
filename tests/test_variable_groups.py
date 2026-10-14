@@ -107,6 +107,12 @@ class VariableGroupUITests(unittest.TestCase):
                 self.select_group("Traits")
                 self.expect_axes("ChlAvg (mg m⁻²)")
                 expect(self.page.get_by_role("radio", name="ChlAvg", exact=True)).to_be_checked()
+        self.select_crop("Potato")
+        self.expect_axes("ChlAvg (mg m⁻²)")
+        expect(self.page.get_by_role("radio", name="ChlAvg", exact=True)).to_be_checked()
+        self.select_crop("Tomato")
+        self.expect_axes("ChlAvg (mg m⁻²)")
+        expect(self.page.get_by_role("radio", name="ChlAvg", exact=True)).to_be_checked()
 
     def test_individual_comparison_dates_have_their_own_full_width_row(self):
         self.page.set_viewport_size({"width": 1600, "height": 1000})

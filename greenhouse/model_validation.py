@@ -430,7 +430,7 @@ def render_model_validation(crop: str, path: Path) -> None:
     scoped = frame.loc[frame["Water"].eq(water) & frame["Nitrogen"].eq(nitrogen)]
     if treatment:
         label = f"{water} × {nitrogen}"
-        dates = _date_controls(scoped, variable, frame, prefix)
+        dates = _date_controls(scoped, variable, frame, prefix, crop=crop)
     else:
         with columns[2]:
             unit = _single_choice("Block", ordered_values(valid["PlantUnit"]), _state_key(prefix, "plant_unit"))
@@ -446,7 +446,7 @@ def render_model_validation(crop: str, path: Path) -> None:
                 label = labels[0]
                 st.caption(f"Label: {label}")
         scoped = scoped.loc[scoped["PlantUnit"].eq(unit) & scoped["Label"].eq(label)]
-        dates = _date_controls(frame, variable, frame, prefix, include_empty_dates=True)
+        dates = _date_controls(frame, variable, frame, prefix, crop=crop, include_empty_dates=True)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return

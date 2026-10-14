@@ -46,6 +46,9 @@ from greenhouse.query_state import restore_query_group, restore_query_variable, 
 WATER_ORDER = ("WW", "DT", "RW")
 NITROGEN_ORDER = ("N0", "N1", "N2")
 REWATERING_DATE = pd.Timestamp("2024-12-06")
+TOMATO_VALID_DATES = frozenset(pd.Timestamp(date) for date in (
+    "2024-12-20", "2025-01-06", "2025-01-20", "2025-01-22", "2025-01-24",
+))
 DATE_COLORS = (
     "#236A8C",
     "#C65D21",
@@ -212,6 +215,7 @@ def _date_controls(
     crop_frame: pd.DataFrame,
     prefix: str,
     *,
+    crop: str,
     include_empty_dates: bool = False,
     time_series: bool = False,
 ) -> list[pd.Timestamp]:
@@ -238,6 +242,23 @@ def _date_controls(
         key=date_key,
         format_func=format_func,
     )
+    if crop == "Tomato" and not time_series:
+        presets = (
+            ("Valid dates", "valid_dates_button", [date for date in dates if date in TOMATO_VALID_DATES]),
+            ("Non-valid dates", "non_valid_dates_button", [date for date in dates if date not in TOMATO_VALID_DATES]),
+        )
+        for column, (label, key, preset_dates) in zip(st.columns(2), presets):
+            with column:
+                st.button(
+                    label,
+                    key=_state_key(prefix, key),
+                    on_click=_set_selected_dates,
+                    args=(date_key, preset_dates),
+                    disabled=not preset_dates,
+                    help="Select " + ", ".join(date.strftime("%Y-%m-%d") for date in preset_dates)
+                    if preset_dates else "No matching dates are available for the current selection.",
+                    width="stretch",
+                )
     if before_dates and after_dates:
         period_columns = st.columns(2)
         with period_columns[0]:
@@ -675,6 +696,7 @@ def _render_single_plant(
             variable,
             frame,
             prefix,
+            crop=crop,
             include_empty_dates=True,
             time_series=time_series,
         )
@@ -765,7 +787,7 @@ def _render_treatment_curve(
         nitrogen = _single_choice("Nitrogen", nitrogens, _state_key(prefix, "nitrogen"))
     scoped = frame.loc[frame["Water"].eq(water) & frame["Nitrogen"].eq(nitrogen)]
     with st.container():
-        dates = _date_controls(scoped, variable, frame, prefix, time_series=time_series)
+        dates = _date_controls(scoped, variable, frame, prefix, crop=crop, time_series=time_series)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
@@ -907,7 +929,7 @@ def _render_individual_comparison(
         st.info("No dates contain valid measurements for these treatments.")
         return
     if time_series:
-        selected_dates = _date_controls(valid, variable, frame, prefix, time_series=True)
+        selected_dates = _date_controls(valid, variable, frame, prefix, crop=crop, time_series=True)
     else:
         date = _single_choice(
             "Date",
@@ -1062,7 +1084,7 @@ def _render_treatment_comparison(
         & frame[other_factor].isin(selected_other_levels)
     ]
     with st.container():
-        dates = _date_controls(scoped, variable, frame, prefix, time_series=time_series)
+        dates = _date_controls(scoped, variable, frame, prefix, crop=crop, time_series=time_series)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return

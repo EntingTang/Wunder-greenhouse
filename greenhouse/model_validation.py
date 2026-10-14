@@ -328,6 +328,14 @@ def _mean_treatment_data(
     result = summaries[0]
     for summary in summaries[1:]:
         result = result.merge(summary, on=groups, how="outer", validate="one_to_one")
+    chlorophyll, _, _ = aggregate_daily_treatment(selected, "Chl")
+    if chlorophyll.empty:
+        result["Chl"] = np.nan
+    else:
+        result = result.merge(
+            chlorophyll[groups + ["Mean"]].rename(columns={"Mean": "Chl"}),
+            on=groups, how="left", validate="one_to_one",
+        )
     result["DateText"] = pd.to_datetime(result["Date"]).dt.strftime("%Y-%m-%d")
     result["DAD"] = result["Date"].map(selected.groupby("Date")["DAD"].first())
     result["Label"] = result["Water"] + " × " + result["Nitrogen"] + " mean"
@@ -518,7 +526,7 @@ def render_model_validation(crop: str, path: Path) -> None:
         _render_chart(spec, prefix, show_title=False)
     if treatment:
         export = display_data[[
-            "Date", "DAD", "Water", "Nitrogen", "PAR", variable, fitted_column,
+            "Date", "DAD", "Water", "Nitrogen", "Chl", "PAR", variable, fitted_column,
             ratio_column, f"{variable}_SD", f"{variable}_n", f"{fitted_column}_n",
         ]].copy().rename(columns={
             f"{variable}_SD": f"{variable_label} SD",

@@ -828,7 +828,7 @@ def _render_individual_comparison(
 ) -> None:
     prefix = _state_key(crop, "compare", "individual_plants")
     valid = frame.loc[valid_value_mask(frame, variable)]
-    filter_columns = st.columns([1, 1, 1.35])
+    filter_columns = st.columns(2)
     waters = ordered_values(valid["Water"], WATER_ORDER)
     with filter_columns[0]:
         selected_waters = _multiple_choice(
@@ -845,18 +845,17 @@ def _render_individual_comparison(
     if not dates:
         st.info("No dates contain valid measurements for these treatments.")
         return
-    with filter_columns[2]:
-        if time_series:
-            selected_dates = _date_controls(valid, variable, frame, prefix, time_series=True)
-        else:
-            date = _single_choice(
-                "Date",
-                dates,
-                _state_key(prefix, "date"),
-                default=dates[-1],
-                format_func=lambda value: format_date(pd.Timestamp(value), frame),
-            )
-            selected_dates = [date]
+    if time_series:
+        selected_dates = _date_controls(valid, variable, frame, prefix, time_series=True)
+    else:
+        date = _single_choice(
+            "Date",
+            dates,
+            _state_key(prefix, "date"),
+            default=dates[-1],
+            format_func=lambda value: format_date(pd.Timestamp(value), frame),
+        )
+        selected_dates = [date]
     if not selected_dates:
         st.info("Select at least one date with valid measurements.")
         return

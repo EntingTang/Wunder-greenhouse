@@ -108,6 +108,32 @@ class VariableGroupUITests(unittest.TestCase):
                 self.expect_axes("ChlAvg (mg m⁻²)")
                 expect(self.page.get_by_role("radio", name="ChlAvg", exact=True)).to_be_checked()
 
+    def test_individual_comparison_dates_have_their_own_full_width_row(self):
+        self.page.set_viewport_size({"width": 1600, "height": 1000})
+        for crop in ("Potato", "Tomato"):
+            with self.subTest(crop=crop):
+                self.select_crop(crop)
+                self.select_group("Traits")
+                self.select_variable("ChlAvg")
+                self.page.get_by_role("radio", name="Compare Data", exact=True).check()
+                self.page.get_by_role("radio", name="Individual plants", exact=True).check()
+                widgets = {}
+                for label in ("Water", "Nitrogen", "Dates"):
+                    widget = self.page.get_by_test_id("stMultiSelect").filter(
+                        has=self.page.get_by_text(label, exact=True)
+                    )
+                    expect(widget).to_be_visible()
+                    widgets[label] = widget.bounding_box()
+                water, nitrogen, dates = (widgets[label] for label in ("Water", "Nitrogen", "Dates"))
+                self.assertGreaterEqual(dates["y"], max(
+                    water["y"] + water["height"], nitrogen["y"] + nitrogen["height"]
+                ))
+                self.assertAlmostEqual(dates["x"], water["x"], delta=2)
+                self.assertAlmostEqual(
+                    dates["x"] + dates["width"], nitrogen["x"] + nitrogen["width"], delta=2
+                )
+                self.expect_axes("ChlAvg (mg m⁻²)")
+
     def test_treatment_time_series_preserves_records_without_par(self):
         files = {
             "Potato": "Potato_meteo_HH2_LSA_biomass_OJIP_tillHarvest_LSA_updated.xlsx",

@@ -119,7 +119,7 @@ with st.sidebar:
     selected_analysis = st.radio(
         "Analysis",
         ["Explore Data", "Compare Data", "Model Validation"],
-        key=f"greenhouse__{selected_crop.lower()}__function",
+        key="greenhouse__analysis",
     )
 
 if selected_analysis == "Model Validation":

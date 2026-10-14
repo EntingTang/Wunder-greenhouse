@@ -1191,14 +1191,15 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
     if st.session_state.get(variable_key) not in columns:
         st.session_state[variable_key] = default_variable
 
-    variable = st.radio(
-        "Response variable",
-        columns,
-        key=variable_key,
-        format_func=labels_by_column.get,
-        horizontal=True,
-        label_visibility="collapsed",
-    )
+    with st.container(key="response_variables"):
+        variable = st.radio(
+            "Response variable",
+            columns,
+            key=variable_key,
+            format_func=labels_by_column.get,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
     variable_label = VARIABLE_LABELS[variable]
     sync_query_selection(crop, function, variable_label, group)
     source = path.name

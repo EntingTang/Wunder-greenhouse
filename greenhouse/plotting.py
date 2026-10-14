@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from math import ceil
 
@@ -58,6 +58,16 @@ MATPLOTLIB_DASHES = ("-", "--", ":", "-.", (0, (7, 3)), (0, (5, 2, 1, 2)))
 
 
 @dataclass
+class PlotAnnotation:
+    """One annotation box with equivalent interactive and static text."""
+
+    html_text: str
+    text: str
+    facet_column: str = ""
+    facet_row: str = ""
+
+
+@dataclass
 class PlotSpec:
     """A renderer-neutral description of the current chart."""
 
@@ -76,6 +86,8 @@ class PlotSpec:
     show_ribbon: bool = False
     x_column: str = "PAR"
     x_label: str = "PAR (µmol m⁻² s⁻¹)"
+    annotations: list[PlotAnnotation] = field(default_factory=list)
+    include_y_zero: bool = False
 
 
 def stable_color_map(values: list[str], overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -139,7 +151,11 @@ def _axis_range(spec: PlotSpec) -> tuple[list, list[float]]:
     else:
         x_values = pd.to_numeric(frame[spec.x_column], errors="coerce").to_numpy(dtype=float)
         x_range = padded(x_values[np.isfinite(x_values)])
-    return x_range, padded(y_values)
+    y_range = padded(y_values)
+    if spec.include_y_zero:
+        y_range[0] = min(0, y_range[0])
+        y_range[1] = max(0, y_range[1])
+    return x_range, y_range
 
 
 def _facet_values(frame: pd.DataFrame, column: str, configured: list[str]) -> list[str]:
@@ -361,6 +377,22 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             showarrow=False,
             font={"size": 17, "color": "#334155"},
         )
+    for row_index, row_value in enumerate(rows, start=1):
+        for column_index, column_value in enumerate(columns, start=1):
+            axis_index = (row_index - 1) * len(columns) + column_index
+            axis_suffix = "" if axis_index == 1 else str(axis_index)
+            for annotation in spec.annotations:
+                if annotation.facet_row != row_value or annotation.facet_column != column_value:
+                    continue
+                figure.add_annotation(
+                    text=annotation.html_text,
+                    xref=f"x{axis_suffix} domain", yref=f"y{axis_suffix} domain",
+                    x=0.98, y=0.04, xanchor="right", yanchor="bottom",
+                    showarrow=False, align="left",
+                    bgcolor="rgba(255,255,255,0.75)",
+                    bordercolor="rgba(100,116,139,0.4)", borderwidth=1, borderpad=8,
+                    font={"size": 14, "color": "#1F2937"},
+                )
     return figure
 
 
@@ -483,6 +515,19 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                     ha="left",
                     fontsize=11.5,
                     color="#475569",
+                )
+            for annotation in spec.annotations:
+                if annotation.facet_row != row_value or annotation.facet_column != column_value:
+                    continue
+                axis.text(
+                    0.98, 0.04, annotation.text, transform=axis.transAxes,
+                    ha="right", va="bottom", fontsize=9.5, linespacing=1.3,
+                    color="#1F2937", zorder=5,
+                    bbox={
+                        "boxstyle": "round,pad=0.45",
+                        "facecolor": (1, 1, 1, 0.75),
+                        "edgecolor": (100 / 255, 116 / 255, 139 / 255, 0.4),
+                    },
                 )
 
     figure.suptitle(

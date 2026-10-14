@@ -1,4 +1,4 @@
-"""Streamlit entry point for the greenhouse light-response curve dashboard."""
+"""Streamlit entry point for the greenhouse data dashboard."""
 
 from pathlib import Path
 
@@ -11,6 +11,10 @@ APP_ROOT = Path(__file__).resolve().parent
 DATA_FILES = {
     "Potato": APP_ROOT / "data" / "Potato_LC_data_for_ts_plots.xlsx",
     "Tomato": APP_ROOT / "data" / "Tomato_LC_data_for_ts_plots.xlsx",
+}
+MEASUREMENT_FILES = {
+    "Potato": APP_ROOT / "data" / "Potato_meteo_HH2_LSA_biomass_OJIP_tillHarvest_LSA_updated.xlsx",
+    "Tomato": APP_ROOT / "data" / "LMM_tomato_input_tillHarvest_LSA_updated.xlsx",
 }
 READ_ONLY_STATE_SUFFIXES = (
     "__interactive_plot",
@@ -113,5 +117,7 @@ with st.sidebar:
         key=f"greenhouse__{selected_crop.lower()}__function",
     )
 
-render_crop_panel(selected_crop, DATA_FILES[selected_crop], selected_analysis)
+render_crop_panel(
+    selected_crop, DATA_FILES[selected_crop], MEASUREMENT_FILES[selected_crop], selected_analysis
+)
 

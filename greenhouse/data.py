@@ -1,4 +1,4 @@
-"""Workbook loading and normalization for greenhouse light-response data."""
+"""Workbook loading, variable groups, and normalization for greenhouse data."""
 
 from __future__ import annotations
 
@@ -9,14 +9,15 @@ import pandas as pd
 import streamlit as st
 
 
-VARIABLE_OPTIONS: tuple[tuple[str, str], ...] = (
+LIGHT_RESPONSE_GROUP = "Light response curve"
+LIGHT_RESPONSE_VARIABLES: tuple[tuple[str, str], ...] = (
     ("F", "F"),
     ("Fm′", "Fm_light"),
+    ("Fo′", "Fo_light_calc"),
     ("P700ox", "P700ox"),
     ("Pm′", "Pm_light"),
     ("Y(II)", "Y(II)_calc"),
     ("ETR(II)", "ETR(II)_calc"),
-    ("Fo′", "Fo_light_calc"),
     ("Y(NPQ)", "Y(NPQ)_calc"),
     ("Y(NO)", "Y(NO)_calc"),
     ("NPQ", "NPQ_calc"),
@@ -29,8 +30,60 @@ VARIABLE_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Y(NA)", "Y(NA)_calc"),
 )
 
+VARIABLE_GROUPS: dict[str, tuple[tuple[str, str], ...]] = {
+    LIGHT_RESPONSE_GROUP: LIGHT_RESPONSE_VARIABLES,
+    "OJIP curve": (
+        ("Fo_OJIP", "Fo_OJIP"),
+        ("F300", "F300"),
+        ("FJ", "FJ"),
+        ("FI", "FI"),
+        ("Fm_OJIP", "Fm_OJIP"),
+        ("Fv/Fm_OJIP", "Fv_Fm_OJIP"),
+        ("Mo", "Mo"),
+        ("VK", "VK"),
+        ("VJ", "VJ"),
+        ("VI", "VI"),
+        ("VK_VJ", "VK_VJ"),
+        ("phi_Po", "phi_Po"),
+        ("psi_o", "psi_o"),
+        ("phi_Eo", "phi_Eo"),
+        ("RC_ABS", "RC_ABS"),
+        ("PIabs", "PIabs"),
+        ("PItot", "PItot"),
+    ),
+    "Traits": (
+        ("Fv/Fm_LSA", "FvFm1_LSA"),
+        ("ChlAvg", "ChlAvg(mg_m2)"),
+        ("AFLAV", "AFLAV"),
+        ("NBI", "NBI"),
+        ("gs_Avg", "gs_Avg(mmol_m2_s)"),
+        ("PlantHeight", "PlantHeight(cm)"),
+    ),
+    "Weather": (
+        ("PAR", "PAR(umol_m2_s1)"),
+        ("SolarRadiation", "SolarRadiation(W_m2)"),
+        ("WindSpeed", "WindSpeed(m_s)"),
+        ("Ta", "Ta(C)"),
+        ("VPD", "VPD(kPa)"),
+    ),
+    "Soil": (("SoilMoisture", "SoilMoisture(m3_m3)"),),
+}
+VARIABLE_OPTIONS = tuple(option for options in VARIABLE_GROUPS.values() for option in options)
 VARIABLE_LABELS = {column: label for label, column in VARIABLE_OPTIONS}
-REQUIRED_COLUMNS = {"Date", "Label", "Water", "Nitrogen", "PAR"}
+VARIABLE_UNITS = {
+    "ETR(II)": "µmol e⁻ m⁻² s⁻¹",
+    "ETR(I)": "µmol e⁻ m⁻² s⁻¹",
+    "ChlAvg": "mg m⁻²",
+    "gs_Avg": "mmol m⁻² s⁻¹",
+    "PlantHeight": "cm",
+    "PAR": "µmol m⁻² s⁻¹",
+    "SolarRadiation": "W m⁻²",
+    "WindSpeed": "m s⁻¹",
+    "Ta": "°C",
+    "VPD": "kPa",
+    "SoilMoisture": "m³ m⁻³",
+}
+REQUIRED_COLUMNS = {"Date", "Label", "Water", "Nitrogen"}
 
 
 class DataValidationError(ValueError):
@@ -49,6 +102,7 @@ def load_workbook(
     path_string: str,
     modified_time_ns: int,
     file_size: int,
+    light_response: bool = True,
 ) -> pd.DataFrame:
     """Read and normalize one crop workbook.
 
@@ -70,7 +124,8 @@ def load_workbook(
         )
     frame.columns = normalized_names
 
-    missing = sorted(REQUIRED_COLUMNS.difference(frame.columns))
+    required = REQUIRED_COLUMNS | ({"PAR"} if light_response else set())
+    missing = sorted(required.difference(frame.columns))
     identity_columns = [column for column in ("Block", "Replicate") if column in frame]
     if missing or not identity_columns:
         details: list[str] = []
@@ -107,18 +162,18 @@ def load_workbook(
             frame[column] = numeric.mask(~np.isfinite(numeric))
             response_columns.append(column)
 
-    numeric_par = pd.to_numeric(frame["PAR"], errors="coerce")
-    valid_par = numeric_par.notna() & np.isfinite(numeric_par)
-    rows_with_values = frame[response_columns].notna().any(axis=1)
-    invalid_measurements = ~valid_par & rows_with_values
-    if bool(invalid_measurements.any()):
-        invalid = int(invalid_measurements.sum())
-        raise DataValidationError(
-            f"{path.name}: {invalid:,} measurement row(s) have a non-numeric or infinite PAR."
-        )
-    # Rows without PAR or any supported response value are date/plant placeholders.
-    # Retaining them lets the UI show explicitly empty dates without plotting them.
-    frame["PAR"] = numeric_par.mask(~valid_par).astype(float)
+    if light_response:
+        numeric_par = pd.to_numeric(frame["PAR"], errors="coerce")
+        valid_par = numeric_par.notna() & np.isfinite(numeric_par)
+        rows_with_values = frame[response_columns].notna().any(axis=1)
+        invalid_measurements = ~valid_par & rows_with_values
+        if bool(invalid_measurements.any()):
+            invalid = int(invalid_measurements.sum())
+            raise DataValidationError(
+                f"{path.name}: {invalid:,} measurement row(s) have a non-numeric or infinite PAR."
+            )
+        # Preserve empty date/plant placeholders for explicit empty facets.
+        frame["PAR"] = numeric_par.mask(~valid_par).astype(float)
 
     identity_values = frame[identity_column].astype("string").str.strip()
     identity_values = identity_values.mask(identity_values.eq(""))
@@ -138,11 +193,13 @@ def load_workbook(
     return frame
 
 
-def available_variables(frame: pd.DataFrame) -> list[tuple[str, str]]:
+def available_variables(
+    frame: pd.DataFrame, group: str = LIGHT_RESPONSE_GROUP
+) -> list[tuple[str, str]]:
     """Return configured variables that contain at least one valid value."""
 
     available: list[tuple[str, str]] = []
-    for label, column in VARIABLE_OPTIONS:
+    for label, column in VARIABLE_GROUPS[group]:
         if column not in frame:
             continue
         numeric = pd.to_numeric(frame[column], errors="coerce")

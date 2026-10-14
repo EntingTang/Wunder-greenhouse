@@ -47,7 +47,7 @@ WATER_ORDER = ("WW", "DT", "RW")
 NITROGEN_ORDER = ("N0", "N1", "N2")
 REWATERING_DATE = pd.Timestamp("2024-12-06")
 TOMATO_VALID_DATES = frozenset(pd.Timestamp(date) for date in (
-    "2025-01-06", "2025-01-20", "2025-01-22", "2025-01-24",
+    "2024-12-20", "2025-01-06", "2025-01-20", "2025-01-22", "2025-01-24",
 ))
 DATE_COLORS = (
     "#236A8C",

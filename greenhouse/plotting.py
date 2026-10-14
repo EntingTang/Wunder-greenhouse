@@ -18,6 +18,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from greenhouse.data import VARIABLE_UNITS
+from greenhouse.boxplots import create_box_figure, create_box_export
 
 
 WATER_COLORS = {"WW": "#2563EB", "DT": "#DC2626", "RW": "#16A34A"}
@@ -88,6 +89,7 @@ class PlotSpec:
     x_label: str = "PAR (µmol m⁻² s⁻¹)"
     annotations: list[PlotAnnotation] = field(default_factory=list)
     include_y_zero: bool = False
+    plot_type: str = "curve"
 
 
 def stable_color_map(values: list[str], overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -182,6 +184,8 @@ def _legend_duplicates_facet_titles(data: pd.DataFrame, columns: list[str]) -> b
 def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     """Render a Plotly figure with shared ranges and optional SD ribbons."""
 
+    if spec.plot_type == "box":
+        return create_box_figure(spec)
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
@@ -407,6 +411,8 @@ def _matplotlib_mode(line_mode: str) -> tuple[str, bool]:
 def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
     """Render the visible page as a 300 DPI PNG or vector PDF."""
 
+    if spec.plot_type == "box":
+        return create_box_export(spec, file_format)
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)

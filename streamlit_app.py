@@ -87,6 +87,19 @@ st.markdown(
         transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), border-color 180ms ease;
       }
       div[role="radiogroup"] > label:active { transform: translateY(1px); }
+      .st-key-response_variables div[role="radiogroup"] {
+        flex-wrap: wrap;
+        overflow-x: visible;
+      }
+      .st-key-response_variables div[role="radiogroup"] label {
+        flex: 0 0 auto;
+        width: auto;
+        min-width: max-content;
+        white-space: nowrap;
+      }
+      .st-key-response_variables [data-testid="stMarkdownContainer"] p {
+        white-space: nowrap;
+      }
       .section-rule {
         border-top: 1px solid var(--line);
         margin: 0.25rem 0 1rem;

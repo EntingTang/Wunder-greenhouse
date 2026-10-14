@@ -18,7 +18,7 @@ from greenhouse.data import (
     ordered_values,
     valid_value_mask,
 )
-from greenhouse.plotting import PlotSpec, axis_label
+from greenhouse.plotting import PlotAnnotation, PlotSpec, axis_label
 from greenhouse.ui import (
     NITROGEN_ORDER,
     WATER_ORDER,
@@ -43,30 +43,45 @@ INVERSE_PAR_UNIT = "m² s µmol⁻¹"
 # Definitions follow Ye et al.'s mechanistic light-response model:
 # https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2025.1478346/full
 COMMON_PARAMETERS = (
-    ("PAR_sat", "PARₛₐₜ", PAR_UNIT, "Saturation light intensity"),
+    ("PAR_sat", "PAR<sub>sat</sub>", PAR_UNIT, "Saturation light intensity"),
 )
 ETR_PARAMETERS = (
-    ("alpha_e", "αₑ", "µmol e⁻ (µmol photons)⁻¹", "Initial slope"),
-    ("beta_e", "βₑ", INVERSE_PAR_UNIT, "Photoinhibition coefficient"),
-    ("gamma_e", "γₑ", INVERSE_PAR_UNIT, "Saturation coefficient"),
-    ("gi_gk_ETR", "gᵢ/gₖ", "", "Ratio of ground-state to excited-state energy level degeneracies"),
+    ("alpha_e", "α<sub>e</sub>", "µmol e⁻ (µmol photons)⁻¹", "Initial slope"),
+    ("beta_e", "β<sub>e</sub>", INVERSE_PAR_UNIT, "Photoinhibition coefficient"),
+    ("gamma_e", "γ<sub>e</sub>", INVERSE_PAR_UNIT, "Saturation coefficient"),
+    ("gi_gk_ETR", "g<sub>i</sub>/g<sub>k</sub>", "", "Ratio of ground-state to excited-state energy level degeneracies"),
     *COMMON_PARAMETERS,
-    ("ETR_max", "Jₘₐₓ", "µmol e⁻ m⁻² s⁻¹", "Maximum electron transport rate"),
-    ("sigma_ik", "σᵢₖ", "m²", "Intrinsic light absorption cross section"),
-    ("tau_min", "τₘᵢₙ", "s", "Minimum average lifetime of pigment molecules in the excited state"),
-    ("N0", "N₀", "", "Number of light harvesting pigments"),
-    ("ETR_R2", "R²", "", "Determination coefficient"),
+    ("ETR_max", "ETR<sub>max</sub>", "µmol e⁻ m⁻² s⁻¹", "Maximum electron transport rate"),
+    ("sigma_ik", "σ<sub>ik</sub>", "m²", "Intrinsic light absorption cross section"),
+    ("tau_min", "τ<sub>min</sub>", "s", "Minimum average lifetime of pigment molecules in the excited state"),
+    ("N0", "N<sub>0</sub>", "", "Number of light harvesting pigments"),
+    ("ETR_R2", "R<sup>2</sup>", "", "Determination coefficient"),
     ("ETR_rmse", "RMSE", "µmol e⁻ m⁻² s⁻¹", "Root mean squared error"),
 )
 YII_PARAMETERS = (
-    ("beta_e_YII", "βₑ", INVERSE_PAR_UNIT, "Photoinhibition coefficient"),
-    ("gamma_e_YII", "γₑ", INVERSE_PAR_UNIT, "Saturation coefficient"),
-    ("gi_gk_YII", "gᵢ/gₖ", "", "Ratio of ground-state to excited-state energy level degeneracies"),
+    ("beta_e_YII", "β<sub>e</sub>", INVERSE_PAR_UNIT, "Photoinhibition coefficient"),
+    ("gamma_e_YII", "γ<sub>e</sub>", INVERSE_PAR_UNIT, "Saturation coefficient"),
+    ("gi_gk_YII", "g<sub>i</sub>/g<sub>k</sub>", "", "Ratio of ground-state to excited-state energy level degeneracies"),
     *COMMON_PARAMETERS,
-    ("YIImax_Ye", "Y(II)ₘₐₓ", "", "Maximum effective quantum yield of photosystem II"),
-    ("YII_Ye_R2", "R²", "", "Determination coefficient"),
+    ("YIImax_Ye", "Y(II)<sub>max</sub>", "", "Maximum effective quantum yield of photosystem II"),
+    ("YII_Ye_R2", "R<sup>2</sup>", "", "Determination coefficient"),
     ("YII_Ye_rmse", "RMSE", "", "Root mean squared error"),
 )
+ANNOTATION_FIELDS = {
+    "ETRII": ("alpha_e", "beta_e", "gamma_e", "PAR_sat", "ETR_max", "ETR_R2"),
+    "YII": ("beta_e_YII", "gamma_e_YII", "PAR_sat", "YII_Ye_R2"),
+}
+ANNOTATION_MATH = {
+    "alpha_e": r"\alpha_{\mathrm{e}}",
+    "beta_e": r"\beta_{\mathrm{e}}",
+    "gamma_e": r"\gamma_{\mathrm{e}}",
+    "beta_e_YII": r"\beta_{\mathrm{e}}",
+    "gamma_e_YII": r"\gamma_{\mathrm{e}}",
+    "PAR_sat": r"\mathrm{PAR}_{\mathrm{sat}}",
+    "ETR_max": r"\mathrm{ETR}_{\mathrm{max}}",
+    "ETR_R2": r"R^{2}",
+    "YII_Ye_R2": r"R^{2}",
+}
 
 
 @st.cache_data(show_spinner=False)
@@ -107,14 +122,51 @@ def load_model_workbook(
     return curves, fits
 
 
+def _model_number(value: object, precision: int = 5) -> str:
+    """Limit significant digits while retaining very small model coefficients."""
+
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return "Not available"
+    return f"{numeric:.{precision}g}" if np.isfinite(numeric) else "Not estimable"
+
+
 def _parameter_table(row: pd.Series, parameters: tuple) -> pd.DataFrame:
     records = []
     for column, symbol, unit, description in parameters:
-        value = _number(row.get(column))
-        if unit:
-            value += f" ({unit})"
-        records.append({"Parameter": symbol, "Value": value, "Description": description})
+        records.append({
+            "Parameter": symbol, "Value": _model_number(row.get(column)),
+            "Unit": unit, "Description": description,
+        })
     return pd.DataFrame(records)
+
+
+def _render_parameter_table(table: pd.DataFrame) -> None:
+    """Render normal English-letter subscripts and a separate unit column."""
+
+    headings = "".join(f"<th scope='col'>{escape(column)}</th>" for column in table.columns)
+    rows = []
+    for record in table.to_dict("records"):
+        # Parameter symbols are trusted constants; workbook-derived text is escaped.
+        cells = "".join(
+            f"<td>{value if column == 'Parameter' else escape(str(value))}</td>"
+            for column, value in record.items()
+        )
+        rows.append(f"<tr>{cells}</tr>")
+    st.html(
+        "<style>"
+        ".model-parameter-table { overflow-x: auto; }"
+        ".model-parameter-table table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }"
+        ".model-parameter-table th, .model-parameter-table td "
+        "{ text-align: left; vertical-align: top; padding: 0.5rem; border-bottom: 1px solid #dce5df; }"
+        ".model-parameter-table th { font-weight: 600; }"
+        ".model-parameter-table td:nth-child(2) { white-space: nowrap; font-variant-numeric: tabular-nums; }"
+        ".model-parameter-table sub, .model-parameter-table sup { font-size: 0.75em; }"
+        "</style>"
+        f"<div class='model-parameter-table'><table><thead><tr>{headings}</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
 
 
 def _render_parameters(
@@ -131,17 +183,59 @@ def _render_parameters(
             continue
         row = matching.iloc[0]
         st.markdown("##### User input")
-        st.table(pd.DataFrame([
-            {"Parameter": "Measured leaf area", "Value": f"{LEAF_AREA_CM2} (cm²)",
-             "Description": "Area of the measured leaf sample"},
-            {"Parameter": "Chlorophyll content", "Value": f"{_number(row['Chl'])} (mg/m²)",
-             "Description": "Chlorophyll content of the measured leaf"},
+        _render_parameter_table(pd.DataFrame([
+            {"Parameter": "Leaf area", "Value": _model_number(LEAF_AREA_CM2), "Unit": "cm²",
+             "Description": "Measured leaf area corresponding to the circular region illuminated by the Dual-PAM optical fiber."},
+            {"Parameter": "Chlorophyll content", "Value": _model_number(row["Chl"]), "Unit": "mg/m²",
+             "Description": "Mean chlorophyll content measured at three locations on the sampled leaf using an LSA."},
         ]))
         st.markdown("##### Parameter estimation")
         if row[success_column] != True:
             st.warning(f"Fit unavailable: {row[message_column]}")
             continue
-        st.table(_parameter_table(row, parameters))
+        _render_parameter_table(_parameter_table(row, parameters))
+
+
+def _model_annotations(
+    fits: pd.DataFrame, selected: pd.DataFrame, variable: str,
+    date_facets: bool, frame: pd.DataFrame,
+) -> list[PlotAnnotation]:
+    """Summarize successful fits for the curves actually shown in each panel."""
+
+    _, fitted_column, _, success_column, _ = MODEL_VARIABLES[variable]
+    visible = selected.loc[valid_value_mask(selected, fitted_column) & selected["PAR"].notna()]
+    curves = visible[["Label", "Date"]].drop_duplicates()
+    matching = fits.merge(curves, on=["Label", "Date"]).sort_values("Date")
+    matching = matching.loc[matching[success_column].eq(True)]
+    parameters = ETR_PARAMETERS if variable == "ETRII" else YII_PARAMETERS
+    symbols = {column: symbol for column, symbol, _, _ in parameters}
+    sections: dict[str, list[tuple[str, str]]] = {}
+    for _, row in matching.iterrows():
+        html_lines, static_lines = [], []
+        for column in ANNOTATION_FIELDS[variable]:
+            value = _model_number(row[column], precision=3)
+            html_lines.append(f"{symbols[column]} = {value}")
+            static_lines.append(f"${ANNOTATION_MATH[column]}$ = {value}")
+        panel = format_date(row["Date"], frame) if date_facets else ""
+        if not date_facets and len(matching) > 1:
+            date = row["Date"].strftime("%Y-%m-%d")
+            # Compact date-labelled summaries keep overlaid curves identifiable.
+            html_lines = [f"<b>{date}</b>"] + [
+                " · ".join(html_lines[index:index + 3])
+                for index in range(0, len(html_lines), 3)
+            ]
+            static_lines = [date] + [
+                " · ".join(static_lines[index:index + 3])
+                for index in range(0, len(static_lines), 3)
+            ]
+        sections.setdefault(panel, []).append(("<br>".join(html_lines), "\n".join(static_lines)))
+    return [
+        PlotAnnotation(
+            html_text="<br><br>".join(html for html, _ in summaries),
+            text="\n\n".join(text for _, text in summaries), facet_column=panel,
+        )
+        for panel, summaries in sections.items()
+    ]
 
 
 def _prepare_model_plot(
@@ -267,7 +361,7 @@ def render_model_validation(crop: str, path: Path) -> None:
     ):
         st.markdown(f"#### {crop} {variable_label}", width="content")
         st.button(
-            "Fit YeLP model", key=_state_key(prefix, "fit_button"),
+            "**Fit YeLP model**", key=_state_key(prefix, "fit_button"),
             on_click=_toggle_fit, args=(fit_key,),
             type="primary" if st.session_state.get(fit_key) else "secondary",
             help="Show or hide the YeLP fitted values and parameters from the workbook.",
@@ -287,6 +381,8 @@ def render_model_validation(crop: str, path: Path) -> None:
         line_mode="markers", color_map={"#DC2626": "#DC2626", "#222222": "#222222"},
         symbol_order=[""], dash_order=[""], facet_rows=[],
         facet_columns=[format_date(date, frame) for date in sorted(dates)] if date_facets else [],
+        annotations=_model_annotations(fits, plot_selection, variable, date_facets, frame) if show_fit else [],
+        include_y_zero=True,
     )
     invalid_count = int((~measured).sum())
     if invalid_count:

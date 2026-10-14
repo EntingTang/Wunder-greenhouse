@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from math import ceil
 
@@ -18,6 +18,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from greenhouse.data import VARIABLE_UNITS
+from greenhouse.boxplots import create_box_figure, create_box_export
 
 
 WATER_COLORS = {"WW": "#2563EB", "DT": "#DC2626", "RW": "#16A34A"}
@@ -58,6 +59,16 @@ MATPLOTLIB_DASHES = ("-", "--", ":", "-.", (0, (7, 3)), (0, (5, 2, 1, 2)))
 
 
 @dataclass
+class PlotAnnotation:
+    """One annotation box with equivalent interactive and static text."""
+
+    html_text: str
+    text: str
+    facet_column: str = ""
+    facet_row: str = ""
+
+
+@dataclass
 class PlotSpec:
     """A renderer-neutral description of the current chart."""
 
@@ -76,6 +87,9 @@ class PlotSpec:
     show_ribbon: bool = False
     x_column: str = "PAR"
     x_label: str = "PAR (µmol m⁻² s⁻¹)"
+    annotations: list[PlotAnnotation] = field(default_factory=list)
+    include_y_zero: bool = False
+    plot_type: str = "curve"
 
 
 def stable_color_map(values: list[str], overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -139,7 +153,11 @@ def _axis_range(spec: PlotSpec) -> tuple[list, list[float]]:
     else:
         x_values = pd.to_numeric(frame[spec.x_column], errors="coerce").to_numpy(dtype=float)
         x_range = padded(x_values[np.isfinite(x_values)])
-    return x_range, padded(y_values)
+    y_range = padded(y_values)
+    if spec.include_y_zero:
+        y_range[0] = min(0, y_range[0])
+        y_range[1] = max(0, y_range[1])
+    return x_range, y_range
 
 
 def _facet_values(frame: pd.DataFrame, column: str, configured: list[str]) -> list[str]:
@@ -166,6 +184,8 @@ def _legend_duplicates_facet_titles(data: pd.DataFrame, columns: list[str]) -> b
 def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     """Render a Plotly figure with shared ranges and optional SD ribbons."""
 
+    if spec.plot_type == "box":
+        return create_box_figure(spec)
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
@@ -251,7 +271,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                     go.Scatter(
                         x=series[spec.x_column],
                         y=series[spec.value_column],
-                        mode=spec.line_mode,
+                        mode=str(series["LineMode"].iloc[0]) if "LineMode" in series else spec.line_mode,
                         name=legend_label,
                         legendgroup=legend_label,
                         showlegend=show_legend and legend_label not in seen_legends,
@@ -261,6 +281,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                             "symbol": symbol,
                             "size": 7.5,
                             "line": {"color": "white", "width": 0.7},
+                            "opacity": float(series["MarkerOpacity"].iloc[0]) if "MarkerOpacity" in series else 1,
                         },
                         text=series["HoverText"],
                         hovertemplate="%{text}<extra></extra>",
@@ -360,6 +381,22 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
             showarrow=False,
             font={"size": 17, "color": "#334155"},
         )
+    for row_index, row_value in enumerate(rows, start=1):
+        for column_index, column_value in enumerate(columns, start=1):
+            axis_index = (row_index - 1) * len(columns) + column_index
+            axis_suffix = "" if axis_index == 1 else str(axis_index)
+            for annotation in spec.annotations:
+                if annotation.facet_row != row_value or annotation.facet_column != column_value:
+                    continue
+                figure.add_annotation(
+                    text=annotation.html_text,
+                    xref=f"x{axis_suffix} domain", yref=f"y{axis_suffix} domain",
+                    x=0.98, y=0.04, xanchor="right", yanchor="bottom",
+                    showarrow=False, align="left",
+                    bgcolor="rgba(255,255,255,0.75)",
+                    bordercolor="rgba(100,116,139,0.4)", borderwidth=1, borderpad=8,
+                    font={"size": 14, "color": "#1F2937"},
+                )
     return figure
 
 
@@ -374,6 +411,8 @@ def _matplotlib_mode(line_mode: str) -> tuple[str, bool]:
 def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
     """Render the visible page as a 300 DPI PNG or vector PDF."""
 
+    if spec.plot_type == "box":
+        return create_box_export(spec, file_format)
     data = spec.visible_data
     rows = _facet_values(data, "FacetRow", spec.facet_rows)
     columns = _facet_values(data, "FacetColumn", spec.facet_columns)
@@ -390,7 +429,6 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
         constrained_layout=True,
     )
     x_range, y_range = _axis_range(spec)
-    line_style, show_markers = _matplotlib_mode(spec.line_mode)
     legend_handles: dict[str, object] = {}
 
     for row_index, row_value in enumerate(rows):
@@ -423,6 +461,10 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                 dash_key = str(series["DashKey"].iloc[0])
                 marker = _category_style(symbol_key, spec.symbol_order, MATPLOTLIB_SYMBOLS)
                 dash_style = _category_style(dash_key, spec.dash_order, MATPLOTLIB_DASHES)
+                line_style, show_markers = _matplotlib_mode(
+                    str(series["LineMode"].iloc[0]) if "LineMode" in series else spec.line_mode
+                )
+                marker_opacity = float(series["MarkerOpacity"].iloc[0]) if "MarkerOpacity" in series else 1
 
                 if spec.show_ribbon and spec.error_column:
                     errors = pd.to_numeric(series[spec.error_column], errors="coerce")
@@ -448,6 +490,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                     markersize=5.2,
                     markeredgecolor="white",
                     markeredgewidth=0.5,
+                    markerfacecolor=matplotlib.colors.to_rgba(color, marker_opacity),
                     label=legend_label,
                 )
                 legend_handles.setdefault(legend_label, handle)
@@ -478,6 +521,19 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                     ha="left",
                     fontsize=11.5,
                     color="#475569",
+                )
+            for annotation in spec.annotations:
+                if annotation.facet_row != row_value or annotation.facet_column != column_value:
+                    continue
+                axis.text(
+                    0.98, 0.04, annotation.text, transform=axis.transAxes,
+                    ha="right", va="bottom", fontsize=9.5, linespacing=1.3,
+                    color="#1F2937", zorder=5,
+                    bbox={
+                        "boxstyle": "round,pad=0.45",
+                        "facecolor": (1, 1, 1, 0.75),
+                        "edgecolor": (100 / 255, 116 / 255, 139 / 255, 0.4),
+                    },
                 )
 
     figure.suptitle(

@@ -9,9 +9,12 @@ import re
 import numpy as np
 import pandas as pd
 import streamlit as st
+from greenhouse.boxplots import distribution_statistics
 
 from greenhouse.data import (
     DataValidationError,
+    DUALPAM_LABEL,
+    DUALPAM_VARIABLE,
     LIGHT_RESPONSE_GROUP,
     VARIABLE_GROUPS,
     VARIABLE_LABELS,
@@ -19,6 +22,7 @@ from greenhouse.data import (
     file_signature,
     format_date,
     load_workbook,
+    load_dualpam_workbook,
     ordered_values,
     valid_value_mask,
 )
@@ -36,6 +40,7 @@ from greenhouse.statistics import (
     aggregate_individual,
     aggregate_period_treatment,
 )
+from greenhouse.query_state import restore_query_group, restore_query_variable, sync_query_selection
 
 
 WATER_ORDER = ("WW", "DT", "RW")
@@ -492,7 +497,14 @@ def _render_result(
                 "their means are shown without a ribbon."
             )
 
+    _render_chart(spec, key_prefix)
+    _render_downloads(spec, export_table, filename_stem, key_prefix)
+
+
+def _render_chart(spec: PlotSpec, key_prefix: str, *, show_title: bool = True) -> None:
     figure = create_plotly_figure(spec)
+    if not show_title:
+        figure.update_layout(title_text=None, margin_t=100 if spec.facet_columns else 80)
     plot_config = {
         "displaylogo": False,
         "scrollZoom": True,
@@ -522,6 +534,10 @@ def _render_result(
             config=plot_config,
         )
 
+
+def _render_downloads(
+    spec: PlotSpec, export_table: pd.DataFrame, filename_stem: str, key_prefix: str
+) -> None:
     with st.expander("Plot data and downloads", expanded=False):
         st.caption(
             "The table and CSV include every selected date. PNG and PDF contain the currently visible date page."
@@ -764,6 +780,12 @@ def _render_treatment_curve(
             horizontal=True,
         )
     selected = scoped.loc[scoped["Date"].isin(dates)]
+    if time_series:
+        _render_treatment_distribution(
+            crop, selected, frame, variable, variable_label, identity_column,
+            color_map, symbol_order, dash_order, dates, water, nitrogen, prefix,
+        )
+        return
     if presentation == "Period summary":
         summary, invalid_count, total_count = aggregate_period_treatment(selected, variable)
     else:
@@ -809,6 +831,45 @@ def _render_treatment_curve(
         export,
         invalid_count=invalid_count,
         total_count=total_count,
+        filename_stem=_slug(f"{crop}-{variable_label}-{water}-{nitrogen}-treatment"),
+        key_prefix=prefix,
+    )
+
+
+def _render_treatment_distribution(
+    crop: str, selected: pd.DataFrame, frame: pd.DataFrame, variable: str,
+    variable_label: str, identity_column: str, color_map: dict[str, str],
+    symbol_order: list[str], dash_order: list[str], dates: list[pd.Timestamp],
+    water: str, nitrogen: str, prefix: str,
+) -> None:
+    plants, invalid_count, total_count = aggregate_individual(selected, variable, time_series=True)
+    if plants.empty:
+        st.info("No valid treatment measurements remain for this selection.")
+        return
+    plot_data = _prepare_individual_plot(
+        plants, crop_frame=frame, color_by="Water", symbol_by="None",
+        date_facets=False, overlay_dates=False, single_plant=False,
+    )
+    spec = _build_spec(
+        plot_data, visible_dates=None, facet_columns=[], facet_rows=[],
+        title=f"{crop} · {variable_label}<br>{water} × {nitrogen} · {_date_summary(dates, frame)}",
+        variable_label=variable_label, line_mode="markers", color_map=color_map,
+        symbol_order=symbol_order, dash_order=dash_order, summary=False,
+        show_ribbon=False, time_series=True,
+    )
+    spec.plot_type = "box"
+    st.caption(
+        "Boxes show Q1–Q3 with 1.5×IQR whiskers and a thick median line. "
+        "White points show individual plant/curve values; black diamonds show means. "
+        "Groups with fewer than 3 values show only points and the mean."
+    )
+    statistics = distribution_statistics(plot_data)
+    export_data = plot_data.merge(statistics, on="Date", validate="many_to_one")
+    export = _export_table(export_data, variable_label, identity_column)
+    for column in ("n", "Mean", "Median", "Q1", "Q3", "Whisker lower", "Whisker upper", "Box shown"):
+        export[column] = export_data[column].to_numpy()
+    _render_result(
+        spec, export, invalid_count=invalid_count, total_count=total_count,
         filename_stem=_slug(f"{crop}-{variable_label}-{water}-{nitrogen}-treatment"),
         key_prefix=prefix,
     )
@@ -1075,6 +1136,7 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
 
     st.markdown(f"### {crop}")
     group_key = _state_key(crop, "variable_group")
+    restore_query_group(crop, group_key)
     if st.session_state.get(group_key) not in VARIABLE_GROUPS:
         st.session_state[group_key] = LIGHT_RESPONSE_GROUP
     heading_column, group_column = st.columns([1.1, 4], vertical_alignment="center")
@@ -1089,6 +1151,7 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
             label_visibility="collapsed",
         )
     time_series = group != LIGHT_RESPONSE_GROUP
+    light_response_path = path
     path = measurements_path if time_series else path
     if not path.exists():
         st.error(f"Data file not found: {path.name}")
@@ -1103,6 +1166,18 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
         return
 
     variables = available_variables(frame, group)
+    dualpam_frame = None
+    dualpam_sheet = None
+    if group == "Traits":
+        variables = [(label, column) for label, column in variables if column != DUALPAM_VARIABLE]
+        try:
+            dualpam_frame, dualpam_sheet = load_dualpam_workbook(
+                str(light_response_path.resolve()), *file_signature(light_response_path)
+            )
+            if valid_value_mask(dualpam_frame, DUALPAM_VARIABLE).any():
+                variables.insert(0, (DUALPAM_LABEL, DUALPAM_VARIABLE))
+        except (OSError, DataValidationError) as exc:
+            st.warning(f"DualPAM Fv/Fm is unavailable: {exc}")
     if not variables:
         st.error(
             f"{path.name} does not contain valid numeric data for {group}."
@@ -1112,6 +1187,7 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
     columns = list(labels_by_column)
     default_variable = "Y(II)_calc" if "Y(II)_calc" in columns else columns[0]
     variable_key = _state_key(crop, "variable", group)
+    restore_query_variable(crop, variable_key, labels_by_column)
     if st.session_state.get(variable_key) not in columns:
         st.session_state[variable_key] = default_variable
 
@@ -1124,9 +1200,14 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
         label_visibility="collapsed",
     )
     variable_label = VARIABLE_LABELS[variable]
+    sync_query_selection(crop, function, variable_label, group)
+    source = path.name
+    if variable == DUALPAM_VARIABLE:
+        frame = dualpam_frame
+        source = f"{light_response_path.name} · {dualpam_sheet} · Fv/Fm"
     st.caption(
         f"{len(frame):,} records · {frame['Label'].nunique():,} plants · "
-        f"{frame['Date'].nunique():,} dates · source: {path.name}"
+        f"{frame['Date'].nunique():,} dates · source: {source}"
     )
     st.markdown('<div class="section-rule"></div>', unsafe_allow_html=True)
 

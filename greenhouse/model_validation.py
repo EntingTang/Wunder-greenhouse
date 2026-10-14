@@ -19,6 +19,7 @@ from greenhouse.data import (
     valid_value_mask,
 )
 from greenhouse.plotting import PlotAnnotation, PlotSpec, axis_label
+from greenhouse.statistics import aggregate_daily_treatment
 from greenhouse.ui import (
     NITROGEN_ORDER,
     WATER_ORDER,
@@ -122,7 +123,7 @@ def load_model_workbook(
     return curves, fits
 
 
-def _model_number(value: object, precision: int = 5) -> str:
+def _model_number(value: object, precision: int = 3) -> str:
     """Limit significant digits while retaining very small model coefficients."""
 
     try:
@@ -171,19 +172,34 @@ def _render_parameter_table(table: pd.DataFrame) -> None:
 
 def _render_parameters(
     fits: pd.DataFrame, dates: list[pd.Timestamp], label: str, variable: str, frame: pd.DataFrame,
-    *, mean_fits: pd.DataFrame | None = None,
+    *, mean_fits: pd.DataFrame | None = None, mean_by_date: bool = False,
+    treatment: bool = False,
 ) -> None:
     st.markdown("#### Parameters")
     if mean_fits is not None:
         if mean_fits.empty:
             st.info("No fitted values are available for the selected dates.")
             return
-        st.markdown(f"**{escape(label)} · Mean ({len(mean_fits)} dates)**")
-        st.caption("Arithmetic means across fitted dates; missing parameter values are omitted.")
-        excluded = len(dates) - len(mean_fits)
+        st.caption(
+            "Arithmetic means across available fits, with equal weight per date; "
+            "missing parameter values are omitted."
+        )
+        excluded = len(dates) - mean_fits["Date"].nunique()
         if excluded:
             st.caption(f"{excluded} selected date(s) without an available fit are excluded.")
-        _render_parameter_values(_mean_parameter_values(mean_fits, variable), variable)
+        if mean_by_date:
+            for date in sorted(dates):
+                daily = mean_fits.loc[mean_fits["Date"].eq(date)]
+                st.markdown(f"**{escape(label)} · {format_date(date, frame)}**")
+                if daily.empty:
+                    st.info("No fitted values are available for this date.")
+                    continue
+                st.caption(_mean_fit_heading(daily, treatment=treatment))
+                _render_parameter_values(_mean_parameter_values(daily, variable), variable)
+        else:
+            heading = _mean_fit_heading(mean_fits, treatment=treatment)
+            st.markdown(f"**{escape(label)} · {heading}**")
+            _render_parameter_values(_mean_parameter_values(mean_fits, variable), variable)
         return
     for date in sorted(dates):
         st.markdown(f"**{escape(label)} · {format_date(date, frame)}**")
@@ -224,38 +240,60 @@ def _matching_model_fits(
 
 
 def _mean_parameter_values(fits: pd.DataFrame, variable: str) -> pd.Series:
-    """Average unrounded, finite parameter values with equal weight per date."""
+    """Average plants within dates, then give each fitted date equal weight."""
 
     parameters = ETR_PARAMETERS if variable == "ETRII" else YII_PARAMETERS
     columns = ["Chl", *(column for column, _, _, _ in parameters)]
     numeric = fits[columns].apply(pd.to_numeric, errors="coerce")
-    return numeric.replace([np.inf, -np.inf], np.nan).mean()
+    numeric = numeric.replace([np.inf, -np.inf], np.nan)
+    return numeric.groupby(fits["Date"]).mean().mean()
+
+
+def _mean_fit_heading(fits: pd.DataFrame, *, treatment: bool = False) -> str:
+    dates = fits["Date"].nunique()
+    date_text = f"{dates} {'date' if dates == 1 else 'dates'}"
+    if treatment:
+        plants = fits["Label"].nunique()
+        plant_text = f"{plants} {'plant' if plants == 1 else 'plants'}"
+        return f"Mean ({plant_text} · {date_text})"
+    return f"Mean ({date_text})"
 
 
 def _model_annotations(
     fits: pd.DataFrame, selected: pd.DataFrame, variable: str,
     date_facets: bool, frame: pd.DataFrame, *, mean_dates: bool = False,
+    mean_plants: bool = False,
 ) -> list[PlotAnnotation]:
     """Summarize successful fits for the curves actually shown in each panel."""
 
     matching = _matching_model_fits(fits, selected, variable)
     if matching.empty:
         return []
-    fit_count = len(matching)
     if mean_dates:
-        matching = _mean_parameter_values(matching, variable).to_frame().T
+        summaries = [("", _mean_parameter_values(matching, variable),
+                      _mean_fit_heading(matching, treatment=mean_plants))]
+    elif mean_plants:
+        summaries = [
+            (format_date(date, frame) if date_facets else "",
+             _mean_parameter_values(daily, variable),
+             _mean_fit_heading(daily, treatment=True))
+            for date, daily in matching.groupby("Date", sort=True)
+        ]
+    else:
+        summaries = [
+            (format_date(row["Date"], frame) if date_facets else "", row, "")
+            for _, row in matching.iterrows()
+        ]
     parameters = ETR_PARAMETERS if variable == "ETRII" else YII_PARAMETERS
     symbols = {column: symbol for column, symbol, _, _ in parameters}
     sections: dict[str, list[tuple[str, str]]] = {}
-    for _, row in matching.iterrows():
+    for panel, row, heading in summaries:
         html_lines, static_lines = [], []
         for column in ANNOTATION_FIELDS[variable]:
             value = _model_number(row[column], precision=3)
             html_lines.append(f"{symbols[column]} = {value}")
             static_lines.append(f"${ANNOTATION_MATH[column]}$ = {value}")
-        panel = format_date(row["Date"], frame) if date_facets else ""
-        if mean_dates:
-            heading = f"Mean ({fit_count} dates)"
+        if heading:
             html_lines.insert(0, f"<b>{heading}</b>")
             static_lines.insert(0, heading)
         sections.setdefault(panel, []).append(("<br>".join(html_lines), "\n".join(static_lines)))
@@ -266,6 +304,33 @@ def _model_annotations(
         )
         for panel, summaries in sections.items()
     ]
+
+
+def _mean_treatment_data(
+    selected: pd.DataFrame, variable: str, fitted_column: str, ratio_column: str,
+) -> pd.DataFrame:
+    """Prepare daily treatment means using Explore's plant aggregation rules."""
+
+    groups = ["Date", "Water", "Nitrogen", "PAR"]
+    summaries = []
+    for column in (variable, fitted_column, ratio_column):
+        daily, _, _ = aggregate_daily_treatment(selected, column)
+        if daily.empty:
+            summary = selected[groups].iloc[:0].copy()
+            for name in (column, f"{column}_SD", f"{column}_n"):
+                summary[name] = pd.Series(dtype=float)
+        else:
+            summary = daily[groups + ["Mean", "SD", "n"]].rename(columns={
+                "Mean": column, "SD": f"{column}_SD", "n": f"{column}_n",
+            })
+        summaries.append(summary)
+    result = summaries[0]
+    for summary in summaries[1:]:
+        result = result.merge(summary, on=groups, how="outer", validate="one_to_one")
+    result["DateText"] = pd.to_datetime(result["Date"]).dt.strftime("%Y-%m-%d")
+    result["DAD"] = result["Date"].map(selected.groupby("Date")["DAD"].first())
+    result["Label"] = result["Water"] + " × " + result["Nitrogen"] + " mean"
+    return result.sort_values(["Date", "PAR"], kind="stable").reset_index(drop=True)
 
 
 def _prepare_model_plot(
@@ -298,6 +363,8 @@ def _prepare_model_plot(
             f"PAR: {_number(row.PAR)}<br>Value: {_number(row.Value)}"
             for row in part.itertuples()
         ]
+        if f"{value_column}_n" in part:
+            part["HoverText"] += "<br>Plants: " + part[f"{value_column}_n"].astype("Int64").astype(str)
         parts.append(part)
     return pd.concat(parts, ignore_index=True)
 
@@ -333,29 +400,42 @@ def render_model_validation(crop: str, path: Path) -> None:
         f"{frame['Date'].nunique():,} dates · source: {path.name}"
     )
     st.markdown('<div class="section-rule"></div>', unsafe_allow_html=True)
+    plot_kind = _single_choice(
+        "Validation view", ["Single plant", "Treatment curve"],
+        _state_key(prefix, "view"), horizontal=True,
+    )
+    treatment = plot_kind == "Treatment curve"
+    if treatment:
+        prefix = _state_key(crop, "model_validation", "treatment_curve")
     st.markdown("#### Filters")
     valid = frame.loc[valid_value_mask(frame, variable)]
-    columns = st.columns(3)
+    columns = st.columns(2 if treatment else 3)
     with columns[0]:
         water = _single_choice("Water", ordered_values(valid["Water"], WATER_ORDER), _state_key(prefix, "water"))
     valid = valid.loc[valid["Water"].eq(water)]
     with columns[1]:
         nitrogen = _single_choice("Nitrogen", ordered_values(valid["Nitrogen"], NITROGEN_ORDER), _state_key(prefix, "nitrogen"))
     valid = valid.loc[valid["Nitrogen"].eq(nitrogen)]
-    with columns[2]:
-        unit = _single_choice("Block", ordered_values(valid["PlantUnit"]), _state_key(prefix, "plant_unit"))
-    valid = valid.loc[valid["PlantUnit"].eq(unit)]
-    labels = ordered_values(valid["Label"])
-    if not labels:
-        st.info("No plant matches the current treatment and block selection.")
-        return
-    with columns[2]:
-        if len(labels) > 1:
-            label = _single_choice("Label", labels, _state_key(prefix, "label"))
-        else:
-            label = labels[0]
-            st.caption(f"Label: {label}")
-    dates = _date_controls(frame, variable, frame, prefix, include_empty_dates=True)
+    scoped = frame.loc[frame["Water"].eq(water) & frame["Nitrogen"].eq(nitrogen)]
+    if treatment:
+        label = f"{water} × {nitrogen}"
+        dates = _date_controls(scoped, variable, frame, prefix)
+    else:
+        with columns[2]:
+            unit = _single_choice("Block", ordered_values(valid["PlantUnit"]), _state_key(prefix, "plant_unit"))
+        valid = valid.loc[valid["PlantUnit"].eq(unit)]
+        labels = ordered_values(valid["Label"])
+        if not labels:
+            st.info("No plant matches the current treatment and block selection.")
+            return
+        with columns[2]:
+            if len(labels) > 1:
+                label = _single_choice("Label", labels, _state_key(prefix, "label"))
+            else:
+                label = labels[0]
+                st.caption(f"Label: {label}")
+        scoped = scoped.loc[scoped["PlantUnit"].eq(unit) & scoped["Label"].eq(label)]
+        dates = _date_controls(frame, variable, frame, prefix, include_empty_dates=True)
     if not dates:
         st.info("Select at least one date with valid measurements.")
         return
@@ -365,15 +445,12 @@ def render_model_validation(crop: str, path: Path) -> None:
             "Date display", ["Date facets", "Overlay dates"],
             _state_key(prefix, "date_display"), horizontal=True,
         )
-    selected = frame.loc[
-        frame["Water"].eq(water) & frame["Nitrogen"].eq(nitrogen)
-        & frame["PlantUnit"].eq(unit) & frame["Label"].eq(label) & frame["Date"].isin(dates)
-    ].sort_values(["Date", "PAR"], kind="stable")
+    selected = scoped.loc[scoped["Date"].isin(dates)].sort_values(["Date", "PAR"], kind="stable")
     measured = valid_value_mask(selected, variable) & selected["PAR"].notna()
     if not measured.any():
-        st.info("No valid measurements remain for this plant and date selection.")
+        st.info("No valid measurements remain for this selection.")
         return
-    selection = (variable, label, tuple(sorted(dates)), presentation)
+    selection = (variable, plot_kind, label, tuple(sorted(dates)), presentation)
     fit_key = _state_key(prefix, "show_fit")
     selection_key = _state_key(prefix, "fit_selection")
     if st.session_state.get(selection_key) != selection:
@@ -400,10 +477,12 @@ def render_model_validation(crop: str, path: Path) -> None:
     st.caption(f"{label} · {_date_summary(dates, frame)}")
     plot_selection = selected.copy()
     if show_fit:
-        successful_dates = fits.loc[fits["Label"].eq(label) & fits[success_column].eq(True), "Date"]
-        plot_selection.loc[~plot_selection["Date"].isin(successful_dates), fitted_column] = np.nan
+        successful = fits.loc[fits[success_column].eq(True), ["Label", "Date"]].assign(FitAvailable=True)
+        plot_selection = plot_selection.merge(successful, on=["Label", "Date"], how="left", validate="many_to_one")
+        plot_selection.loc[~plot_selection["FitAvailable"].eq(True), [fitted_column, ratio_column]] = np.nan
     date_facets = presentation == "Date facets"
-    plot_data = _prepare_model_plot(plot_selection, variable, fitted_column, show_fit, date_facets, frame)
+    display_data = _mean_treatment_data(plot_selection, variable, fitted_column, ratio_column) if treatment else plot_selection
+    plot_data = _prepare_model_plot(display_data, variable, fitted_column, show_fit, date_facets, frame)
     spec = PlotSpec(
         all_data=plot_data, visible_data=plot_data,
         title=f"{crop} {variable_label}<br>{label} · {_date_summary(dates, frame)}",
@@ -414,6 +493,7 @@ def render_model_validation(crop: str, path: Path) -> None:
         annotations=_model_annotations(
             fits, plot_selection, variable, date_facets, frame,
             mean_dates=presentation == "Overlay dates",
+            mean_plants=treatment,
         ) if show_fit else [],
         include_y_zero=True,
     )
@@ -428,14 +508,24 @@ def render_model_validation(crop: str, path: Path) -> None:
             _render_parameters(
                 fits, dates, label, variable, frame,
                 mean_fits=_matching_model_fits(fits, plot_selection, variable)
-                if presentation == "Overlay dates" else None,
+                if treatment or presentation == "Overlay dates" else None,
+                mean_by_date=treatment and date_facets, treatment=treatment,
             )
     else:
         _render_chart(spec, prefix, show_title=False)
-    export = selected[[
-        "Date", "DAD", "Label", "Water", "Nitrogen", "Block", "PAR",
-        variable, fitted_column, ratio_column,
-    ]].copy()
+    if treatment:
+        export = display_data[[
+            "Date", "DAD", "Water", "Nitrogen", "PAR", variable, fitted_column,
+            ratio_column, f"{variable}_SD", f"{variable}_n", f"{fitted_column}_n",
+        ]].copy().rename(columns={
+            f"{variable}_SD": f"{variable_label} SD",
+            f"{variable}_n": "Measured plants", f"{fitted_column}_n": "Fitted plants",
+        })
+    else:
+        export = selected[[
+            "Date", "DAD", "Label", "Water", "Nitrogen", "Block", "PAR",
+            variable, fitted_column, ratio_column,
+        ]].copy()
     export["Date"] = export["Date"].dt.strftime("%Y-%m-%d")
     export = export.rename(columns={variable: variable_label, ratio_column: "Nk/N0"})
     _render_downloads(spec, export.reset_index(drop=True), _slug(f"{crop}-{variable_label}-{label}-model-validation"), prefix)

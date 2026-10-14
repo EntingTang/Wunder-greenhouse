@@ -10,6 +10,8 @@ import streamlit as st
 
 
 LIGHT_RESPONSE_GROUP = "Light response curve"
+DUALPAM_VARIABLE = "FvFm_DualPAM"
+DUALPAM_LABEL = "Fv/Fm_DualPAM"
 LIGHT_RESPONSE_VARIABLES: tuple[tuple[str, str], ...] = (
     ("F", "F"),
     ("Fm′", "Fm_light"),
@@ -52,7 +54,7 @@ VARIABLE_GROUPS: dict[str, tuple[tuple[str, str], ...]] = {
         ("PItot", "PItot"),
     ),
     "Traits": (
-        ("Fv/Fm_LSA", "FvFm1_LSA"),
+        (DUALPAM_LABEL, DUALPAM_VARIABLE),
         ("ChlAvg", "ChlAvg(mg_m2)"),
         ("AFLAV", "AFLAV"),
         ("NBI", "NBI"),
@@ -195,6 +197,51 @@ def load_workbook(
     frame["DateText"] = frame["Date"].dt.strftime("%Y-%m-%d")
     frame["SourceRow"] = np.arange(2, len(frame) + 2, dtype=int)
     return frame
+
+
+@st.cache_data(show_spinner=False)
+def load_dualpam_workbook(
+    path_string: str, modified_time_ns: int, file_size: int,
+) -> tuple[pd.DataFrame, str]:
+    """Read dark-adapted Fv/Fm once per plant/date from the light-response file."""
+
+    path = Path(path_string)
+    try:
+        with pd.ExcelFile(path, engine="openpyxl") as workbook:
+            sheets = workbook.sheet_names
+    except Exception as exc:
+        raise DataValidationError(f"Could not read {path.name}: {exc}") from exc
+    if "QC_filter" in sheets:
+        sheet = "QC_filter"
+    elif "Sheet1" in sheets:
+        # The current Tomato workbook uses this name for its light-response data.
+        sheet = "Sheet1"
+    else:
+        raise DataValidationError(f"{path.name}: no QC_filter or Sheet1 sheet for DualPAM Fv/Fm.")
+    frame = load_workbook(
+        path_string, modified_time_ns, file_size, light_response=False, sheet_name=sheet
+    )
+    if "Fv/Fm" not in frame:
+        raise DataValidationError(f"{path.name} ({sheet}): missing Fv/Fm column.")
+    numeric = pd.to_numeric(frame["Fv/Fm"], errors="coerce")
+    frame[DUALPAM_VARIABLE] = numeric.mask(~np.isfinite(numeric))
+    keys = ["Date", "Label"]
+    grouped = frame.groupby(keys, sort=False)
+    for column in (DUALPAM_VARIABLE, "Water", "Nitrogen", "PlantUnit", "DAD"):
+        if column in frame and grouped[column].nunique().gt(1).any():
+            raise DataValidationError(
+                f"{path.name} ({sheet}): conflicting {column} values for the same plant/date."
+            )
+    columns = [
+        column for column in (
+            "Date", "DAD", "Label", "Water", "Nitrogen", "Block", "Replicate",
+            "PlantUnit", "PlantUnitColumn", "DateText", "SourceRow", DUALPAM_VARIABLE,
+        ) if column in frame
+    ]
+    # Light steps repeat the same dark measurement; first() retains the valid
+    # value when other rows for that plant/date are empty QC placeholders.
+    values = frame[columns].groupby(keys, sort=False, as_index=False).first()
+    return values, sheet
 
 
 def available_variables(

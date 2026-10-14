@@ -170,43 +170,80 @@ def _render_parameter_table(table: pd.DataFrame) -> None:
 
 
 def _render_parameters(
-    fits: pd.DataFrame, dates: list[pd.Timestamp], label: str, variable: str, frame: pd.DataFrame
+    fits: pd.DataFrame, dates: list[pd.Timestamp], label: str, variable: str, frame: pd.DataFrame,
+    *, mean_fits: pd.DataFrame | None = None,
 ) -> None:
     st.markdown("#### Parameters")
-    parameters = ETR_PARAMETERS if variable == "ETRII" else YII_PARAMETERS
-    _, _, _, success_column, message_column = MODEL_VARIABLES[variable]
+    if mean_fits is not None:
+        if mean_fits.empty:
+            st.info("No fitted values are available for the selected dates.")
+            return
+        st.markdown(f"**{escape(label)} · Mean ({len(mean_fits)} dates)**")
+        st.caption("Arithmetic means across fitted dates; missing parameter values are omitted.")
+        excluded = len(dates) - len(mean_fits)
+        if excluded:
+            st.caption(f"{excluded} selected date(s) without an available fit are excluded.")
+        _render_parameter_values(_mean_parameter_values(mean_fits, variable), variable)
+        return
     for date in sorted(dates):
         st.markdown(f"**{escape(label)} · {format_date(date, frame)}**")
         matching = fits.loc[fits["Label"].eq(label) & fits["Date"].eq(date)]
         if matching.empty:
             st.info("No fit_results entry for this plant and date.")
             continue
-        row = matching.iloc[0]
-        st.markdown("##### User input")
-        _render_parameter_table(pd.DataFrame([
-            {"Parameter": "Leaf area", "Value": _model_number(LEAF_AREA_CM2), "Unit": "cm²",
-             "Description": "Circular region illuminated by the Dual-PAM optical fiber."},
-            {"Parameter": "Chlorophyll content", "Value": _model_number(row["Chl"]), "Unit": "mg/m²",
-             "Description": "Mean values of 3 spots of the measured leaf, measured by LSA"},
-        ]))
-        st.markdown("##### Parameter estimation")
-        if row[success_column] != True:
-            st.warning(f"Fit unavailable: {row[message_column]}")
-            continue
-        _render_parameter_table(_parameter_table(row, parameters))
+        _render_parameter_values(matching.iloc[0], variable)
 
 
-def _model_annotations(
+def _render_parameter_values(row: pd.Series, variable: str) -> None:
+    parameters = ETR_PARAMETERS if variable == "ETRII" else YII_PARAMETERS
+    _, _, _, success_column, message_column = MODEL_VARIABLES[variable]
+    st.markdown("##### User input")
+    _render_parameter_table(pd.DataFrame([
+        {"Parameter": "Leaf area", "Value": _model_number(LEAF_AREA_CM2), "Unit": "cm²",
+         "Description": "Circular region illuminated by the Dual-PAM optical fiber."},
+        {"Parameter": "Chlorophyll content", "Value": _model_number(row["Chl"]), "Unit": "mg/m²",
+         "Description": "Mean values of 3 spots of the measured leaf, measured by LSA"},
+    ]))
+    st.markdown("##### Parameter estimation")
+    if row.get(success_column, True) != True:
+        st.warning(f"Fit unavailable: {row[message_column]}")
+        return
+    _render_parameter_table(_parameter_table(row, parameters))
+
+
+def _matching_model_fits(
     fits: pd.DataFrame, selected: pd.DataFrame, variable: str,
-    date_facets: bool, frame: pd.DataFrame,
-) -> list[PlotAnnotation]:
-    """Summarize successful fits for the curves actually shown in each panel."""
+) -> pd.DataFrame:
+    """Return one successful fit per visible plant/date curve."""
 
     _, fitted_column, _, success_column, _ = MODEL_VARIABLES[variable]
     visible = selected.loc[valid_value_mask(selected, fitted_column) & selected["PAR"].notna()]
     curves = visible[["Label", "Date"]].drop_duplicates()
     matching = fits.merge(curves, on=["Label", "Date"]).sort_values("Date")
-    matching = matching.loc[matching[success_column].eq(True)]
+    return matching.loc[matching[success_column].eq(True)]
+
+
+def _mean_parameter_values(fits: pd.DataFrame, variable: str) -> pd.Series:
+    """Average unrounded, finite parameter values with equal weight per date."""
+
+    parameters = ETR_PARAMETERS if variable == "ETRII" else YII_PARAMETERS
+    columns = ["Chl", *(column for column, _, _, _ in parameters)]
+    numeric = fits[columns].apply(pd.to_numeric, errors="coerce")
+    return numeric.replace([np.inf, -np.inf], np.nan).mean()
+
+
+def _model_annotations(
+    fits: pd.DataFrame, selected: pd.DataFrame, variable: str,
+    date_facets: bool, frame: pd.DataFrame, *, mean_dates: bool = False,
+) -> list[PlotAnnotation]:
+    """Summarize successful fits for the curves actually shown in each panel."""
+
+    matching = _matching_model_fits(fits, selected, variable)
+    if matching.empty:
+        return []
+    fit_count = len(matching)
+    if mean_dates:
+        matching = _mean_parameter_values(matching, variable).to_frame().T
     parameters = ETR_PARAMETERS if variable == "ETRII" else YII_PARAMETERS
     symbols = {column: symbol for column, symbol, _, _ in parameters}
     sections: dict[str, list[tuple[str, str]]] = {}
@@ -217,17 +254,10 @@ def _model_annotations(
             html_lines.append(f"{symbols[column]} = {value}")
             static_lines.append(f"${ANNOTATION_MATH[column]}$ = {value}")
         panel = format_date(row["Date"], frame) if date_facets else ""
-        if not date_facets and len(matching) > 1:
-            date = row["Date"].strftime("%Y-%m-%d")
-            # Compact date-labelled summaries keep overlaid curves identifiable.
-            html_lines = [f"<b>{date}</b>"] + [
-                " · ".join(html_lines[index:index + 3])
-                for index in range(0, len(html_lines), 3)
-            ]
-            static_lines = [date] + [
-                " · ".join(static_lines[index:index + 3])
-                for index in range(0, len(static_lines), 3)
-            ]
+        if mean_dates:
+            heading = f"Mean ({fit_count} dates)"
+            html_lines.insert(0, f"<b>{heading}</b>")
+            static_lines.insert(0, heading)
         sections.setdefault(panel, []).append(("<br>".join(html_lines), "\n".join(static_lines)))
     return [
         PlotAnnotation(
@@ -381,7 +411,10 @@ def render_model_validation(crop: str, path: Path) -> None:
         line_mode="markers", color_map={"#DC2626": "#DC2626", "#222222": "#222222"},
         symbol_order=[""], dash_order=[""], facet_rows=[],
         facet_columns=[format_date(date, frame) for date in sorted(dates)] if date_facets else [],
-        annotations=_model_annotations(fits, plot_selection, variable, date_facets, frame) if show_fit else [],
+        annotations=_model_annotations(
+            fits, plot_selection, variable, date_facets, frame,
+            mean_dates=presentation == "Overlay dates",
+        ) if show_fit else [],
         include_y_zero=True,
     )
     invalid_count = int((~measured).sum())
@@ -392,7 +425,11 @@ def render_model_validation(crop: str, path: Path) -> None:
         with plot_column:
             _render_chart(spec, prefix, show_title=False)
         with parameters_column:
-            _render_parameters(fits, dates, label, variable, frame)
+            _render_parameters(
+                fits, dates, label, variable, frame,
+                mean_fits=_matching_model_fits(fits, plot_selection, variable)
+                if presentation == "Overlay dates" else None,
+            )
     else:
         _render_chart(spec, prefix, show_title=False)
     export = selected[[

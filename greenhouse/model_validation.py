@@ -46,7 +46,7 @@ COMMON_PARAMETERS = (
     ("PAR_sat", "PAR<sub>sat</sub>", PAR_UNIT, "Saturation light intensity"),
 )
 ETR_PARAMETERS = (
-    ("alpha_e", "α<sub>e</sub>", "µmol e⁻ (µmol photons)⁻¹", "Initial slope"),
+    ("alpha_e", "α<sub>e</sub>", "µmol e⁻", "Initial slope"),
     ("beta_e", "β<sub>e</sub>", INVERSE_PAR_UNIT, "Photoinhibition coefficient"),
     ("gamma_e", "γ<sub>e</sub>", INVERSE_PAR_UNIT, "Saturation coefficient"),
     ("gi_gk_ETR", "g<sub>i</sub>/g<sub>k</sub>", "", "Ratio of ground-state to excited-state energy level degeneracies"),

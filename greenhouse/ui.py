@@ -9,6 +9,7 @@ import re
 import numpy as np
 import pandas as pd
 import streamlit as st
+from greenhouse.boxplots import distribution_statistics
 
 from greenhouse.data import (
     DataValidationError,
@@ -776,6 +777,12 @@ def _render_treatment_curve(
             horizontal=True,
         )
     selected = scoped.loc[scoped["Date"].isin(dates)]
+    if time_series:
+        _render_treatment_distribution(
+            crop, selected, frame, variable, variable_label, identity_column,
+            color_map, symbol_order, dash_order, dates, water, nitrogen, prefix,
+        )
+        return
     if presentation == "Period summary":
         summary, invalid_count, total_count = aggregate_period_treatment(selected, variable)
     else:
@@ -821,6 +828,45 @@ def _render_treatment_curve(
         export,
         invalid_count=invalid_count,
         total_count=total_count,
+        filename_stem=_slug(f"{crop}-{variable_label}-{water}-{nitrogen}-treatment"),
+        key_prefix=prefix,
+    )
+
+
+def _render_treatment_distribution(
+    crop: str, selected: pd.DataFrame, frame: pd.DataFrame, variable: str,
+    variable_label: str, identity_column: str, color_map: dict[str, str],
+    symbol_order: list[str], dash_order: list[str], dates: list[pd.Timestamp],
+    water: str, nitrogen: str, prefix: str,
+) -> None:
+    plants, invalid_count, total_count = aggregate_individual(selected, variable, time_series=True)
+    if plants.empty:
+        st.info("No valid treatment measurements remain for this selection.")
+        return
+    plot_data = _prepare_individual_plot(
+        plants, crop_frame=frame, color_by="Water", symbol_by="None",
+        date_facets=False, overlay_dates=False, single_plant=False,
+    )
+    spec = _build_spec(
+        plot_data, visible_dates=None, facet_columns=[], facet_rows=[],
+        title=f"{crop} · {variable_label}<br>{water} × {nitrogen} · {_date_summary(dates, frame)}",
+        variable_label=variable_label, line_mode="markers", color_map=color_map,
+        symbol_order=symbol_order, dash_order=dash_order, summary=False,
+        show_ribbon=False, time_series=True,
+    )
+    spec.plot_type = "box"
+    st.caption(
+        "Boxes show Q1–Q3 with 1.5×IQR whiskers and a thick median line. "
+        "White points show individual plant/curve values; black diamonds show means. "
+        "Groups with fewer than 3 values show only points and the mean."
+    )
+    statistics = distribution_statistics(plot_data)
+    export_data = plot_data.merge(statistics, on="Date", validate="many_to_one")
+    export = _export_table(export_data, variable_label, identity_column)
+    for column in ("n", "Mean", "Median", "Q1", "Q3", "Whisker lower", "Whisker upper", "Box shown"):
+        export[column] = export_data[column].to_numpy()
+    _render_result(
+        spec, export, invalid_count=invalid_count, total_count=total_count,
         filename_stem=_slug(f"{crop}-{variable_label}-{water}-{nitrogen}-treatment"),
         key_prefix=prefix,
     )

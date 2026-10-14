@@ -118,11 +118,11 @@ with st.sidebar:
     )
     selected_analysis = st.radio(
         "Analysis",
-        ["Explore Data", "Compare Data", "Model validation"],
+        ["Explore Data", "Compare Data", "Model Validation"],
         key=f"greenhouse__{selected_crop.lower()}__function",
     )
 
-if selected_analysis == "Model validation":
+if selected_analysis == "Model Validation":
     render_model_validation(selected_crop, MODEL_FILES[selected_crop])
 else:
     render_crop_panel(

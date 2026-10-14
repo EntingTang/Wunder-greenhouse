@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 
 import streamlit as st
 
-from greenhouse.data import LIGHT_RESPONSE_GROUP, VARIABLE_GROUPS
+from greenhouse.data import DUALPAM_LABEL, LIGHT_RESPONSE_GROUP, VARIABLE_GROUPS
 
 
 QUERY_KEYS = ("crop", "analysis", "variable", "group")
@@ -29,6 +29,8 @@ def parse_view_query(
     """Accept known labels/columns and infer the group for response-only links."""
 
     variable = params.get("variable")
+    if variable in ("Fv/Fm_LSA", "FvFm1_LSA"):
+        variable = DUALPAM_LABEL
     inferred_group = LIGHT_RESPONSE_GROUP
     for group, variables in VARIABLE_GROUPS.items():
         if any((variable or "").strip().casefold() in (label.casefold(), column.casefold())

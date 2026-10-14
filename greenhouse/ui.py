@@ -13,6 +13,8 @@ from greenhouse.boxplots import distribution_statistics
 
 from greenhouse.data import (
     DataValidationError,
+    DUALPAM_LABEL,
+    DUALPAM_VARIABLE,
     LIGHT_RESPONSE_GROUP,
     VARIABLE_GROUPS,
     VARIABLE_LABELS,
@@ -20,6 +22,7 @@ from greenhouse.data import (
     file_signature,
     format_date,
     load_workbook,
+    load_dualpam_workbook,
     ordered_values,
     valid_value_mask,
 )
@@ -1148,6 +1151,7 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
             label_visibility="collapsed",
         )
     time_series = group != LIGHT_RESPONSE_GROUP
+    light_response_path = path
     path = measurements_path if time_series else path
     if not path.exists():
         st.error(f"Data file not found: {path.name}")
@@ -1162,6 +1166,18 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
         return
 
     variables = available_variables(frame, group)
+    dualpam_frame = None
+    dualpam_sheet = None
+    if group == "Traits":
+        variables = [(label, column) for label, column in variables if column != DUALPAM_VARIABLE]
+        try:
+            dualpam_frame, dualpam_sheet = load_dualpam_workbook(
+                str(light_response_path.resolve()), *file_signature(light_response_path)
+            )
+            if valid_value_mask(dualpam_frame, DUALPAM_VARIABLE).any():
+                variables.insert(0, (DUALPAM_LABEL, DUALPAM_VARIABLE))
+        except (OSError, DataValidationError) as exc:
+            st.warning(f"DualPAM Fv/Fm is unavailable: {exc}")
     if not variables:
         st.error(
             f"{path.name} does not contain valid numeric data for {group}."
@@ -1185,9 +1201,13 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
     )
     variable_label = VARIABLE_LABELS[variable]
     sync_query_selection(crop, function, variable_label, group)
+    source = path.name
+    if variable == DUALPAM_VARIABLE:
+        frame = dualpam_frame
+        source = f"{light_response_path.name} · {dualpam_sheet} · Fv/Fm"
     st.caption(
         f"{len(frame):,} records · {frame['Label'].nunique():,} plants · "
-        f"{frame['Date'].nunique():,} dates · source: {path.name}"
+        f"{frame['Date'].nunique():,} dates · source: {source}"
     )
     st.markdown('<div class="section-rule"></div>', unsafe_allow_html=True)
 

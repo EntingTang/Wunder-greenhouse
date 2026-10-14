@@ -185,9 +185,9 @@ def _render_parameters(
         st.markdown("##### User input")
         _render_parameter_table(pd.DataFrame([
             {"Parameter": "Leaf area", "Value": _model_number(LEAF_AREA_CM2), "Unit": "cm²",
-             "Description": "Measured leaf area corresponding to the circular region illuminated by the Dual-PAM optical fiber."},
+             "Description": "Circular region illuminated by the Dual-PAM optical fiber."},
             {"Parameter": "Chlorophyll content", "Value": _model_number(row["Chl"]), "Unit": "mg/m²",
-             "Description": "Mean chlorophyll content measured at three locations on the sampled leaf using an LSA."},
+             "Description": "Mean values of 3 spots of the measured leaf, measured by LSA"},
         ]))
         st.markdown("##### Parameter estimation")
         if row[success_column] != True:

@@ -1074,6 +1074,9 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
     """Render one isolated crop panel, including its own load errors and state."""
 
     st.markdown(f"### {crop}")
+    group_key = _state_key(crop, "variable_group")
+    if st.session_state.get(group_key) not in VARIABLE_GROUPS:
+        st.session_state[group_key] = LIGHT_RESPONSE_GROUP
     heading_column, group_column = st.columns([1.1, 4], vertical_alignment="center")
     with heading_column:
         st.markdown("#### Response variable")
@@ -1081,9 +1084,8 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
         group = st.segmented_control(
             "Variable group",
             list(VARIABLE_GROUPS),
-            default=LIGHT_RESPONSE_GROUP,
             required=True,
-            key=_state_key(crop, "variable_group"),
+            key=group_key,
             label_visibility="collapsed",
         )
     time_series = group != LIGHT_RESPONSE_GROUP

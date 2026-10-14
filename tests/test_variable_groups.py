@@ -134,6 +134,23 @@ class VariableGroupUITests(unittest.TestCase):
                 )
                 self.expect_axes("ChlAvg (mg m⁻²)")
 
+    def expect_sd_ribbons_without_boundary_markers(self):
+        rendered = self.page.locator(".js-plotly-plot").evaluate(
+            """plot => {
+                const ribbons = plot._fullData.filter(trace => trace.fill === 'toself');
+                const means = plot._fullData.filter(trace => trace.hoverinfo !== 'skip');
+                return {
+                    modes: ribbons.map(trace => trace.mode),
+                    expectedMeanPoints: means.reduce((count, trace) => count + trace.x.length, 0),
+                    renderedPoints: plot.querySelectorAll('.scatterlayer .points path.point').length
+                };
+            }"""
+        )
+        self.assertTrue(rendered["modes"], "Treatment comparisons must retain their SD shading")
+        self.assertTrue(all(mode == "lines" for mode in rendered["modes"]))
+        self.assertGreater(rendered["expectedMeanPoints"], 0)
+        self.assertEqual(rendered["renderedPoints"], rendered["expectedMeanPoints"])
+
     def test_treatment_time_series_preserves_records_without_par(self):
         files = {
             "Potato": "Potato_meteo_HH2_LSA_biomass_OJIP_tillHarvest_LSA_updated.xlsx",
@@ -147,6 +164,7 @@ class VariableGroupUITests(unittest.TestCase):
                 self.page.get_by_role("radio", name="Compare Data", exact=True).check()
                 self.page.get_by_role("radio", name="Water treatments", exact=True).check()
                 self.expect_axes("SolarRadiation (W m⁻²)", series_name="WW")
+                self.expect_sd_ribbons_without_boundary_markers()
                 self.page.get_by_text("Plot data and downloads", exact=True).click()
                 with self.page.expect_download() as download_info:
                     self.page.get_by_role("button", name="Download CSV", exact=True).click()
@@ -170,6 +188,7 @@ class VariableGroupUITests(unittest.TestCase):
                 self.assertNotIn("PAR", actual.columns)
                 self.page.get_by_role("radio", name="Nitrogen treatments", exact=True).check()
                 self.expect_axes("SolarRadiation (W m⁻²)", series_name="N0")
+                self.expect_sd_ribbons_without_boundary_markers()
 
 
 if __name__ == "__main__":

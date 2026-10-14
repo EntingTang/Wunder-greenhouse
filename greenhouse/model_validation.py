@@ -255,17 +255,14 @@ def render_model_validation(crop: str, path: Path) -> None:
     if st.session_state.get(selection_key) != selection:
         st.session_state[fit_key] = False
         st.session_state[selection_key] = selection
-    heading, button = st.columns([2, 1], vertical_alignment="center")
-    with heading:
-        st.markdown(f"#### {crop} {variable_label}")
-    with button:
-        st.button(
-            "Fit YeLP model", key=_state_key(prefix, "fit_button"),
-            on_click=_toggle_fit, args=(fit_key,),
-            type="primary" if st.session_state.get(fit_key) else "secondary",
-            help="Show or hide the YeLP fitted values and parameters from the workbook.",
-        )
+    st.button(
+        "Fit YeLP model", key=_state_key(prefix, "fit_button"),
+        on_click=_toggle_fit, args=(fit_key,),
+        type="primary" if st.session_state.get(fit_key) else "secondary",
+        help="Show or hide the YeLP fitted values and parameters from the workbook.",
+    )
     show_fit = st.session_state.get(fit_key, False)
+    st.markdown(f"#### {crop} {variable_label}")
     st.caption(f"{label} · {_date_summary(dates, frame)}")
     plot_selection = selected.copy()
     if show_fit:

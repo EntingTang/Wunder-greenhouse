@@ -103,7 +103,7 @@ def load_model_workbook(
     fits.columns = [str(column).strip() for column in fits.columns]
     if fits.columns.duplicated().any():
         raise DataValidationError(f"{path.name}: duplicate fit_results column names.")
-    missing_curves = sorted({"DAD", "Block", *MODEL_NUMERIC_COLUMNS}.difference(curves.columns))
+    missing_curves = sorted({"DAD", "Block", "Chl", *MODEL_NUMERIC_COLUMNS}.difference(curves.columns))
     required_fits = {
         "Date", "Label", "Chl", "etr_fit_success", "etr_fit_message",
         "yii_ye_fit_success", "yii_ye_fit_message",
@@ -526,7 +526,7 @@ def render_model_validation(crop: str, path: Path) -> None:
         })
     else:
         export = selected[[
-            "Date", "DAD", "Label", "Water", "Nitrogen", "Block", "PAR",
+            "Date", "DAD", "Label", "Water", "Nitrogen", "Block", "Chl", "PAR",
             variable, fitted_column, ratio_column,
         ]].copy()
     export["Date"] = export["Date"].dt.strftime("%Y-%m-%d")

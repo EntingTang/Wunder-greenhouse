@@ -360,7 +360,6 @@ def _prepare_model_plot(
         part["HoverText"] = [
             f"<b>{escape(str(row.Label))}</b><br>{legend}<br>"
             f"Date: {format_date(row.Date, frame)}<br>"
-            f"Water: {escape(str(row.Water))} · Nitrogen: {escape(str(row.Nitrogen))}<br>"
             f"PAR: {_number(row.PAR)}<br>Value: {_number(row.Value)}"
             for row in part.itertuples()
         ]

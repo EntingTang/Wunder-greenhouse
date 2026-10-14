@@ -30,8 +30,9 @@ def _plant_metadata(frame: pd.DataFrame, include_date: bool) -> dict[str, tuple[
 def aggregate_individual(
     frame: pd.DataFrame,
     variable: str,
+    time_series: bool = False,
 ) -> tuple[pd.DataFrame, int, int]:
-    """Average duplicate light-curve records for each plant, date, and PAR."""
+    """Average duplicates within each plant/date (and PAR for light curves)."""
 
     total = len(frame)
     valid_mask = valid_value_mask(frame, variable)
@@ -41,11 +42,13 @@ def aggregate_individual(
         return pd.DataFrame(), invalid_count, total
 
     aggregations = {"Value": (variable, "mean"), **_plant_metadata(valid, True)}
+    groups = [column for column in PLANT_GROUPS if not time_series or column != "PAR"]
+    sort_columns = ["Date", "Label"] + ([] if time_series else ["PAR"])
     result = (
-        valid.groupby(PLANT_GROUPS, observed=True, dropna=False)
+        valid.groupby(groups, observed=True, dropna=False)
         .agg(**aggregations)
         .reset_index()
-        .sort_values(["Date", "Label", "PAR"], kind="stable")
+        .sort_values(sort_columns, kind="stable")
         .reset_index(drop=True)
     )
     result["DateText"] = result["Date"].dt.strftime("%Y-%m-%d")
@@ -56,22 +59,24 @@ def aggregate_individual(
 def aggregate_daily_treatment(
     frame: pd.DataFrame,
     variable: str,
+    time_series: bool = False,
 ) -> tuple[pd.DataFrame, int, int]:
     """Compute daily treatment mean, sample SD, and effective plant count."""
 
-    plants, invalid_count, total = aggregate_individual(frame, variable)
+    plants, invalid_count, total = aggregate_individual(frame, variable, time_series)
     if plants.empty:
         return pd.DataFrame(), invalid_count, total
 
+    groups = [column for column in TREATMENT_GROUPS if not time_series or column != "PAR"]
     result = (
-        plants.groupby(TREATMENT_GROUPS, observed=True, dropna=False)
+        plants.groupby(groups, observed=True, dropna=False)
         .agg(
             Mean=("Value", "mean"),
             SD=("Value", lambda values: values.std(ddof=1)),
             n=("Value", "count"),
         )
         .reset_index()
-        .sort_values(["Date", "Water", "Nitrogen", "PAR"], kind="stable")
+        .sort_values(groups, kind="stable")
         .reset_index(drop=True)
     )
     result["DateText"] = result["Date"].dt.strftime("%Y-%m-%d")

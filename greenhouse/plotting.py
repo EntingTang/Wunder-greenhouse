@@ -251,7 +251,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                     go.Scatter(
                         x=series[spec.x_column],
                         y=series[spec.value_column],
-                        mode=spec.line_mode,
+                        mode=str(series["LineMode"].iloc[0]) if "LineMode" in series else spec.line_mode,
                         name=legend_label,
                         legendgroup=legend_label,
                         showlegend=show_legend and legend_label not in seen_legends,
@@ -261,6 +261,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                             "symbol": symbol,
                             "size": 7.5,
                             "line": {"color": "white", "width": 0.7},
+                            "opacity": float(series["MarkerOpacity"].iloc[0]) if "MarkerOpacity" in series else 1,
                         },
                         text=series["HoverText"],
                         hovertemplate="%{text}<extra></extra>",
@@ -390,7 +391,6 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
         constrained_layout=True,
     )
     x_range, y_range = _axis_range(spec)
-    line_style, show_markers = _matplotlib_mode(spec.line_mode)
     legend_handles: dict[str, object] = {}
 
     for row_index, row_value in enumerate(rows):
@@ -423,6 +423,10 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                 dash_key = str(series["DashKey"].iloc[0])
                 marker = _category_style(symbol_key, spec.symbol_order, MATPLOTLIB_SYMBOLS)
                 dash_style = _category_style(dash_key, spec.dash_order, MATPLOTLIB_DASHES)
+                line_style, show_markers = _matplotlib_mode(
+                    str(series["LineMode"].iloc[0]) if "LineMode" in series else spec.line_mode
+                )
+                marker_opacity = float(series["MarkerOpacity"].iloc[0]) if "MarkerOpacity" in series else 1
 
                 if spec.show_ribbon and spec.error_column:
                     errors = pd.to_numeric(series[spec.error_column], errors="coerce")
@@ -448,6 +452,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                     markersize=5.2,
                     markeredgecolor="white",
                     markeredgewidth=0.5,
+                    markerfacecolor=matplotlib.colors.to_rgba(color, marker_opacity),
                     label=legend_label,
                 )
                 legend_handles.setdefault(legend_label, handle)

@@ -492,7 +492,14 @@ def _render_result(
                 "their means are shown without a ribbon."
             )
 
+    _render_chart(spec, key_prefix)
+    _render_downloads(spec, export_table, filename_stem, key_prefix)
+
+
+def _render_chart(spec: PlotSpec, key_prefix: str, *, show_title: bool = True) -> None:
     figure = create_plotly_figure(spec)
+    if not show_title:
+        figure.update_layout(title_text=None, margin_t=100 if spec.facet_columns else 80)
     plot_config = {
         "displaylogo": False,
         "scrollZoom": True,
@@ -522,6 +529,10 @@ def _render_result(
             config=plot_config,
         )
 
+
+def _render_downloads(
+    spec: PlotSpec, export_table: pd.DataFrame, filename_stem: str, key_prefix: str
+) -> None:
     with st.expander("Plot data and downloads", expanded=False):
         st.caption(
             "The table and CSV include every selected date. PNG and PDF contain the currently visible date page."

@@ -36,6 +36,7 @@ from greenhouse.statistics import (
     aggregate_individual,
     aggregate_period_treatment,
 )
+from greenhouse.query_state import restore_query_group, restore_query_variable, sync_query_selection
 
 
 WATER_ORDER = ("WW", "DT", "RW")
@@ -1086,6 +1087,7 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
 
     st.markdown(f"### {crop}")
     group_key = _state_key(crop, "variable_group")
+    restore_query_group(crop, group_key)
     if st.session_state.get(group_key) not in VARIABLE_GROUPS:
         st.session_state[group_key] = LIGHT_RESPONSE_GROUP
     heading_column, group_column = st.columns([1.1, 4], vertical_alignment="center")
@@ -1123,6 +1125,7 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
     columns = list(labels_by_column)
     default_variable = "Y(II)_calc" if "Y(II)_calc" in columns else columns[0]
     variable_key = _state_key(crop, "variable", group)
+    restore_query_variable(crop, variable_key, labels_by_column)
     if st.session_state.get(variable_key) not in columns:
         st.session_state[variable_key] = default_variable
 
@@ -1135,6 +1138,7 @@ def render_crop_panel(crop: str, path: Path, measurements_path: Path, function: 
         label_visibility="collapsed",
     )
     variable_label = VARIABLE_LABELS[variable]
+    sync_query_selection(crop, function, variable_label, group)
     st.caption(
         f"{len(frame):,} records · {frame['Label'].nunique():,} plants · "
         f"{frame['Date'].nunique():,} dates · source: {path.name}"

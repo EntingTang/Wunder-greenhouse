@@ -20,6 +20,7 @@ from greenhouse.data import (
 )
 from greenhouse.plotting import PlotAnnotation, PlotSpec, axis_label
 from greenhouse.statistics import aggregate_daily_treatment
+from greenhouse.query_state import restore_query_variable, sync_query_selection
 from greenhouse.ui import (
     NITROGEN_ORDER,
     WATER_ORDER,
@@ -390,11 +391,14 @@ def render_model_validation(crop: str, path: Path) -> None:
     if not variables:
         st.error("No valid ETR(II) or Y(II) measurements are available.")
         return
+    variable_key = _state_key(prefix, "variable")
+    restore_query_variable(crop, variable_key, {column: MODEL_VARIABLES[column][0] for column in variables})
     variable = _single_choice(
-        "Response variable", variables, _state_key(prefix, "variable"), horizontal=True,
+        "Response variable", variables, variable_key, horizontal=True,
         format_func=lambda column: MODEL_VARIABLES[column][0],
     )
     variable_label, fitted_column, ratio_column, success_column, _ = MODEL_VARIABLES[variable]
+    sync_query_selection(crop, "Model Validation", variable_label)
     st.caption(
         f"{len(frame):,} records · {frame['Label'].nunique():,} plants · "
         f"{frame['Date'].nunique():,} dates · source: {path.name}"

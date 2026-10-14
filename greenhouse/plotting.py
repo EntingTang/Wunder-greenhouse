@@ -10,11 +10,14 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+from greenhouse.data import VARIABLE_UNITS
 
 
 WATER_COLORS = {"WW": "#2563EB", "DT": "#DC2626", "RW": "#16A34A"}
@@ -71,6 +74,8 @@ class PlotSpec:
     facet_rows: list[str]
     facet_columns: list[str]
     show_ribbon: bool = False
+    x_column: str = "PAR"
+    x_label: str = "PAR (µmol m⁻² s⁻¹)"
 
 
 def stable_color_map(values: list[str], overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -84,11 +89,10 @@ def stable_color_map(values: list[str], overrides: dict[str, str] | None = None)
 
 
 def axis_label(variable_label: str) -> str:
-    """Return the response-axis title, retaining the ETR unit convention."""
+    """Keep selector labels short and put physical units on the response axis."""
 
-    if variable_label.startswith("ETR("):
-        return f"{variable_label} (µmol e⁻ m⁻² s⁻¹)"
-    return variable_label
+    unit = VARIABLE_UNITS.get(variable_label)
+    return f"{variable_label} ({unit})" if unit else variable_label
 
 
 def _rgba(hex_color: str, alpha: float) -> str:
@@ -106,11 +110,9 @@ def _category_style(value: object, order: list[str], choices: tuple[str, ...]) -
     return choices[index % len(choices)]
 
 
-def _axis_range(spec: PlotSpec) -> tuple[list[float], list[float]]:
+def _axis_range(spec: PlotSpec) -> tuple[list, list[float]]:
     frame = spec.all_data
-    x_values = pd.to_numeric(frame["PAR"], errors="coerce").to_numpy(dtype=float)
     y_values = pd.to_numeric(frame[spec.value_column], errors="coerce").to_numpy(dtype=float)
-    x_values = x_values[np.isfinite(x_values)]
     y_values = y_values[np.isfinite(y_values)]
 
     if spec.error_column and spec.error_column in frame:
@@ -129,7 +131,15 @@ def _axis_range(spec: PlotSpec) -> tuple[list[float], list[float]]:
         padding = span * 0.05 if span else max(abs(maximum) * 0.05, 0.05)
         return [minimum - padding, maximum + padding]
 
-    return padded(x_values), padded(y_values)
+    if spec.x_column == "Date":
+        dates = pd.to_datetime(frame["Date"], errors="coerce").dropna()
+        minimum, maximum = dates.min(), dates.max()
+        padding = (maximum - minimum) * 0.05 if maximum > minimum else pd.Timedelta(days=1)
+        x_range = [minimum - padding, maximum + padding]
+    else:
+        x_values = pd.to_numeric(frame[spec.x_column], errors="coerce").to_numpy(dtype=float)
+        x_range = padded(x_values[np.isfinite(x_values)])
+    return x_range, padded(y_values)
 
 
 def _facet_values(frame: pd.DataFrame, column: str, configured: list[str]) -> list[str]:
@@ -207,7 +217,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                 continue
 
             for _, series in panel.groupby("SeriesKey", observed=True, sort=False):
-                series = series.sort_values("PAR", kind="stable")
+                series = series.sort_values(spec.x_column, kind="stable")
                 legend_label = str(series["LegendLabel"].iloc[0])
                 color_key = str(series["ColorKey"].iloc[0])
                 color = spec.color_map.get(color_key, GENERAL_COLORS[0])
@@ -224,7 +234,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
                         lower = ribbon[spec.value_column] - ribbon[spec.error_column]
                         figure.add_trace(
                             go.Scatter(
-                                x=pd.concat([ribbon["PAR"], ribbon["PAR"].iloc[::-1]]),
+                                x=pd.concat([ribbon[spec.x_column], ribbon[spec.x_column].iloc[::-1]]),
                                 y=pd.concat([upper, lower.iloc[::-1]]),
                                 fill="toself",
                                 fillcolor=_rgba(color, 0.16),
@@ -238,7 +248,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
 
                 figure.add_trace(
                     go.Scatter(
-                        x=series["PAR"],
+                        x=series[spec.x_column],
                         y=series[spec.value_column],
                         mode=spec.line_mode,
                         name=legend_label,
@@ -311,7 +321,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
         paper_bgcolor="#FFFFFF",
     )
     figure.update_xaxes(
-        title_text=None if has_column_facets else "PAR (µmol m⁻² s⁻¹)",
+        title_text=None if has_column_facets else spec.x_label,
         showgrid=True,
         gridcolor="#E8ECE8",
         zeroline=False,
@@ -329,7 +339,7 @@ def create_plotly_figure(spec: PlotSpec) -> go.Figure:
     figure.update_annotations(font={"size": 16, "color": "#334155"})
     if has_column_facets:
         figure.add_annotation(
-            text="PAR (µmol m⁻² s⁻¹)",
+            text=spec.x_label,
             xref="paper",
             yref="paper",
             x=0.5,
@@ -404,7 +414,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                 )
 
             for _, series in panel.groupby("SeriesKey", observed=True, sort=False):
-                series = series.sort_values("PAR", kind="stable")
+                series = series.sort_values(spec.x_column, kind="stable")
                 legend_label = str(series["LegendLabel"].iloc[0])
                 color_key = str(series["ColorKey"].iloc[0])
                 color = spec.color_map.get(color_key, GENERAL_COLORS[0])
@@ -418,7 +428,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                     ribbon = series.loc[errors.notna() & np.isfinite(errors)]
                     if not ribbon.empty:
                         axis.fill_between(
-                            ribbon["PAR"].to_numpy(dtype=float),
+                            ribbon[spec.x_column].to_numpy(),
                             (ribbon[spec.value_column] - ribbon[spec.error_column]).to_numpy(dtype=float),
                             (ribbon[spec.value_column] + ribbon[spec.error_column]).to_numpy(dtype=float),
                             color=color,
@@ -428,7 +438,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
 
                 effective_line = dash_style if line_style != "None" else "None"
                 (handle,) = axis.plot(
-                    series["PAR"],
+                    series[spec.x_column],
                     series[spec.value_column],
                     color=color,
                     linestyle=effective_line,
@@ -442,12 +452,16 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
                 legend_handles.setdefault(legend_label, handle)
 
             axis.set_xlim(x_range)
+            if spec.x_column == "Date":
+                locator = mdates.AutoDateLocator(minticks=3, maxticks=8)
+                axis.xaxis.set_major_locator(locator)
+                axis.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
             axis.set_ylim(y_range)
             axis.grid(True, color="#E8ECE8", linewidth=0.8)
             axis.spines[["top", "right"]].set_visible(False)
             axis.tick_params(axis="both", labelsize=11)
             if row_index == len(rows) - 1 and not has_column_facets:
-                axis.set_xlabel("PAR (µmol m⁻² s⁻¹)", fontsize=12.5)
+                axis.set_xlabel(spec.x_label, fontsize=12.5)
             if column_index == 0 and not has_column_facets:
                 axis.set_ylabel(spec.y_label, fontsize=12.5)
             if column_value:
@@ -473,7 +487,7 @@ def create_static_export(spec: PlotSpec, file_format: str) -> bytes:
         fontweight="bold",
     )
     if has_column_facets:
-        figure.supxlabel("PAR (µmol m⁻² s⁻¹)", fontsize=12.5)
+        figure.supxlabel(spec.x_label, fontsize=12.5)
         figure.supylabel(spec.y_label, fontsize=12.5)
     if legend_handles and show_legend:
         figure.legend(

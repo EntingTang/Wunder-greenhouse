@@ -1,7 +1,7 @@
 # Greenhouse curve explorer
 
 An independent Streamlit application for exploring and comparing Potato and
-Tomato light-response curves from processed Excel workbooks. The app keeps the
+Tomato light-response curves and measurements from processed Excel workbooks. The app keeps the
 uploaded dates and treatment labels unchanged and shares one loading,
 aggregation, and plotting pipeline across both crops.
 
@@ -9,6 +9,11 @@ aggregation, and plotting pipeline across both crops.
 
 - Separate Potato and Tomato panels with independent filter state.
 - Dynamic response-variable, treatment, plant, block/replicate, and date options.
+- Response-variable groups beside the header: Light response curve, OJIP curve,
+  Traits, Weather, and Soil. Selector labels omit units; plot axes include them.
+- Light-response curves use PAR; the other groups use measurement dates, with
+  all dates selected initially. Treatment time series show daily mean and SD
+  across plants, including measurements without a recorded PAR value.
 - Native Excel dates and `MM-DD-YYYY` text normalized to `YYYY-MM-DD`.
 - Plant curves that merge duplicate LC records at the same plant, date, and PAR.
 - Daily treatment mean, sample SD, and effective plant count.
@@ -25,13 +30,20 @@ Place these workbooks in `data/`:
 ```text
 data/Potato_LC_data_for_ts_plots.xlsx
 data/Tomato_LC_data_for_ts_plots.xlsx
+data/Potato_meteo_HH2_LSA_biomass_OJIP_tillHarvest_LSA_updated.xlsx
+data/LMM_tomato_input_tillHarvest_LSA_updated.xlsx
 ```
 
-Each workbook must contain `Date`, `Label`, `Water`, `Nitrogen`, `PAR`, and
-either `Block` or `Replicate`. `DAD` is optional. A response variable is offered
+Each workbook must contain `Date`, `Label`, `Water`, `Nitrogen`, and
+either `Block` or `Replicate`. Light-response workbooks also require `PAR`.
+`DAD` is optional. The first sheet is used (`QC_filter` for potato light curves).
+A response variable is offered
 only when its source column exists and has at least one finite numeric value.
 Rows with no PAR and no supported response value are retained as date/plant
 placeholders, allowing single-plant date facets to report `No data` explicitly.
+Each group reads its own source workbook without joining daily measurements
+onto light-curve rows. Missing or entirely empty variables are omitted; the
+current tomato measurement workbook does not contain `gs_Avg(mmol_m2_s)`.
 
 ## Run locally
 
@@ -49,7 +61,7 @@ The command prints a local URL, normally `http://localhost:8501`.
 ## Deploy
 
 For Streamlit Community Cloud, connect this repository and use the default
-`streamlit_app.py` entry point. Keep both Excel files committed under `data/`;
+`streamlit_app.py` entry point. Keep all four Excel files committed under `data/`;
 dependencies are installed from `requirements.txt` automatically.
 
 For another Python host, install the requirements and start:
@@ -58,11 +70,29 @@ For another Python host, install the requirements and start:
 streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port $PORT
 ```
 
-No secrets or external services are required. Replacing either workbook changes
+No secrets or external services are required. Replacing a workbook changes
 its modification time or size, which invalidates the cached file read on the
 next Streamlit rerun.
 
+## UI coverage
+
+With the app running, install the development dependencies and run the targeted
+Playwright coverage for group selection, axis labels, and treatment statistics:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m playwright install chromium
+python -m unittest discover -s tests -p test_variable_groups.py
+```
+
+Set `GREENHOUSE_BASE_URL` to target an app URL other than `http://localhost:8501`.
+
 ## Statistical definitions
+
+The definitions below apply to light-response curves. For the other variable
+groups, plant points are means within `Date × Label × Water × Nitrogen`, and
+daily treatment statistics use `Date × Water × Nitrogen`. Dates remain on the
+x-axis instead of being collapsed into a period summary.
 
 Plant points are means over:
 

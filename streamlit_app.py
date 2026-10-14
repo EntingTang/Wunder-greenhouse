@@ -6,6 +6,7 @@ import streamlit as st
 
 from greenhouse.ui import render_crop_panel
 from greenhouse.model_validation import render_model_validation
+from greenhouse.query_state import restore_query_selection, sync_query_selection
 
 
 APP_ROOT = Path(__file__).resolve().parent
@@ -21,6 +22,7 @@ MODEL_FILES = {
     "Potato": APP_ROOT / "data" / "Potato_ye_ETR_YII_model_results.xlsx",
     "Tomato": APP_ROOT / "data" / "Tomato_ye_ETR_YII_results.xlsx",
 }
+ANALYSES = ["Explore Data", "Compare Data", "Model Validation"]
 READ_ONLY_STATE_SUFFIXES = (
     "__interactive_plot",
     "_button",
@@ -34,6 +36,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+restore_query_selection(list(DATA_FILES), ANALYSES)
 
 # Keep crop-specific widget values when only the selected crop panel is rendered.
 for state_key in list(st.session_state):
@@ -118,9 +121,11 @@ with st.sidebar:
     )
     selected_analysis = st.radio(
         "Analysis",
-        ["Explore Data", "Compare Data", "Model Validation"],
+        ANALYSES,
         key="greenhouse__analysis",
     )
+
+sync_query_selection(selected_crop, selected_analysis)
 
 if selected_analysis == "Model Validation":
     render_model_validation(selected_crop, MODEL_FILES[selected_crop])
